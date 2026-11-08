@@ -107,3 +107,40 @@ def test_alternative_answers_are_accepted():
     assert judge_answer("Ο ελεγκτής είναι η ΕΡΝΣΤ ΓΙΑΝΓΚ (ΕΛΛΑΣ) [1]", item)[0]
     assert judge_answer("Ernst & Young [2]", item)[0]
     assert not judge_answer("Deloitte [1]", item)[0]
+
+
+class _Resp:
+    def __init__(self, status, body=None, headers=None):
+        self.status_code, self._body, self.headers = status, body or {}, headers or {}
+
+    def json(self):
+        return self._body
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(self.status_code)
+
+
+def test_groq_spec_and_rate_limit_retry(monkeypatch):
+    from athex_rag import llm as llm_mod
+
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    client = make_llm("groq:llama-3.3-70b-versatile")
+    assert client.name == "groq:llama-3.3-70b-versatile"
+    assert client.base_url == "https://api.groq.com/openai/v1"
+
+    calls = []
+    ok = {"choices": [{"message": {"content": " answer [1] "}}]}
+    responses = [_Resp(429, headers={"retry-after": "0"}), _Resp(503), _Resp(200, ok)]
+    monkeypatch.setattr(client, "_post", lambda payload: calls.append(payload) or responses.pop(0))
+    monkeypatch.setattr(llm_mod.time, "sleep", lambda s: None)
+    assert client.generate("sys", "prompt") == "answer [1]"
+    assert len(calls) == 3 and calls[0]["model"] == "llama-3.3-70b-versatile"
+
+
+def test_missing_api_key_is_a_clear_error(monkeypatch):
+    import pytest
+
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="LLM_API_KEY"):
+        make_llm("groq:x").generate("s", "p")

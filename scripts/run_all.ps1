@@ -7,13 +7,17 @@
       .\scripts\run_all.ps1 -Quick          # one embedder, one LLM, no reranker (much faster)
       .\scripts\run_all.ps1 -SkipLLM        # retrieval experiments only
       .\scripts\run_all.ps1 -ServeOnly      # just start the web UI on the best index
+      .\scripts\run_all.ps1 -Quick -Llm groq:llama-3.3-70b-versatile
+                                            # use a hosted LLM instead of Ollama
+                                            # (needs:  setx LLM_API_KEY "<key>"  once)
 
   If script execution is blocked:  Set-ExecutionPolicy -Scope Process Bypass
 #>
 param(
     [switch]$Quick,
     [switch]$SkipLLM,
-    [switch]$ServeOnly
+    [switch]$ServeOnly,
+    [string[]]$Llm      # e.g. groq:llama-3.3-70b-versatile ; overrides the Ollama models
 )
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path $PSScriptRoot -Parent)
@@ -33,6 +37,10 @@ if ($Quick) {
     $embedders = @("intfloat/multilingual-e5-small")
     $reranker = "none"
 }
+if ($Llm) { $llms = $Llm }
+if (($llms -notmatch "^ollama:") -and -not $env:LLM_API_KEY -and -not $SkipLLM) {
+    throw "LLM_API_KEY is not set. Run:  setx LLM_API_KEY `"<your key>`"  and open a new PowerShell."
+}
 
 if (-not $ServeOnly) {
     if (-not (Test-Path "eval\questions.jsonl")) { throw "eval\questions.jsonl not found" }
@@ -40,7 +48,7 @@ if (-not $ServeOnly) {
         throw "No PDFs in data\raw (see data\README.md)"
     }
     if (-not $SkipLLM) {
-        foreach ($m in $llms) {
+        foreach ($m in ($llms | Where-Object { $_ -like "ollama:*" })) {
             $name = $m -replace "^ollama:", ""
             Write-Host "Pulling $name ..." -ForegroundColor Cyan
             ollama pull $name

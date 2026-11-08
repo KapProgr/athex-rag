@@ -1,7 +1,7 @@
 """LLM backends behind one small interface.
 
 * ``OllamaClient`` - local, free (default). Run ``ollama pull qwen2.5:7b`` first.
-* ``OpenAICompatibleClient`` - any /v1/chat/completions server (Groq free tier,
+* ``OpenAICompatibleClient`` - any /v1/chat/completions server (``groq:<model>``,
   LM Studio, vLLM, OpenAI). Lets you compare models in the evaluation.
 * ``FakeLLM`` - deterministic stub for tests.
 """
@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from typing import Protocol
 
 import httpx
+
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 
 class LLMClient(Protocol):
@@ -50,27 +53,55 @@ class OllamaClient:
 
 
 class OpenAICompatibleClient:
+    """Any /v1/chat/completions API (Groq, OpenAI, LM Studio, vLLM...).
+
+    Free tiers (e.g. Groq) rate-limit by tokens per minute; a 429 or 5xx response is
+    retried after the server's ``Retry-After`` delay (or exponential backoff).
+    """
+
     def __init__(
-        self, model: str, base_url: str, api_key: str | None = None, timeout: float = 120.0
+        self,
+        model: str,
+        base_url: str,
+        api_key: str | None = None,
+        timeout: float = 120.0,
+        max_retries: int = 8,
+        name_prefix: str = "openai-compatible",
     ):
         self.model, self.base_url, self.timeout = model, base_url.rstrip("/"), timeout
         self.api_key = api_key or os.environ.get("LLM_API_KEY", "")
-        self.name = f"openai-compatible:{model}"
+        self.max_retries = max_retries
+        self.name = f"{name_prefix}:{model}"
 
-    def generate(self, system: str, prompt: str) -> str:
-        response = httpx.post(
+    def _post(self, payload: dict) -> httpx.Response:
+        return httpx.post(
             f"{self.base_url}/chat/completions",
             headers={"Authorization": f"Bearer {self.api_key}"},
-            json={
-                "model": self.model,
-                "temperature": 0,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": prompt},
-                ],
-            },
+            json=payload,
             timeout=self.timeout,
         )
+
+    def generate(self, system: str, prompt: str) -> str:
+        if not self.api_key:
+            raise RuntimeError("LLM_API_KEY is not set (see README: Using a hosted LLM)")
+        payload = {
+            "model": self.model,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+        }
+        for attempt in range(self.max_retries + 1):
+            response = self._post(payload)
+            retryable = response.status_code == 429 or response.status_code >= 500
+            if not retryable or attempt == self.max_retries:
+                break
+            try:
+                delay = float(response.headers.get("retry-after", ""))
+            except ValueError:
+                delay = 2.0 * 2**attempt
+            time.sleep(min(delay, 60.0))
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"].strip()
 
@@ -90,7 +121,8 @@ class FakeLLM:
 def make_llm(spec: str | None = None) -> LLMClient:
     """Build a client from a spec string.
 
-    ``ollama:qwen2.5:7b`` | ``openai:<model>@<base_url>`` | ``fake``.
+    ``ollama:qwen2.5:7b`` | ``groq:<model>`` | ``openai:<model>@<base_url>`` | ``fake``.
+    Hosted APIs read the key from the ``LLM_API_KEY`` environment variable.
     Defaults to the ``ATHEX_LLM`` env var, then ``ollama:qwen2.5:7b``.
     """
     spec = spec or os.environ.get("ATHEX_LLM", "ollama:qwen2.5:7b")
@@ -99,6 +131,8 @@ def make_llm(spec: str | None = None) -> LLMClient:
     if spec.startswith("ollama:"):
         host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
         return OllamaClient(spec.removeprefix("ollama:"), host=host)
+    if spec.startswith("groq:"):
+        return OpenAICompatibleClient(spec.removeprefix("groq:"), GROQ_BASE_URL, name_prefix="groq")
     if spec.startswith("openai:"):
         model, _, base_url = spec.removeprefix("openai:").partition("@")
         return OpenAICompatibleClient(model, base_url or "https://api.openai.com/v1")

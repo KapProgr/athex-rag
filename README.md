@@ -85,6 +85,18 @@ Requirements: Python 3.10+, [Ollama](https://ollama.com), and the annual report 
 
 Then open <http://localhost:8000>. Clicking a citation highlights its source, and "Open PDF" jumps to the cited page.
 
+### Using a hosted LLM (Groq) instead of Ollama
+
+Without a GPU, a local 7B model takes about a minute per question. A free [Groq](https://console.groq.com) key is much faster:
+
+```powershell
+setx LLM_API_KEY "<your key>"        # once; then open a new PowerShell
+.\scripts\run_all.ps1 -Quick -Llm groq:llama-3.3-70b-versatile
+athex-rag ask "Ποιο μέρισμα προτείνει η ΔΕΗ για τη χρήση 2025;" --llm groq:llama-3.3-70b-versatile
+```
+
+The key is read from the environment and never stored in the repo. Rate-limit responses (HTTP 429) are retried automatically. Any OpenAI-compatible API works with `--llm openai:<model>@<base_url>`.
+
 ### Manual
 
 ```bash
