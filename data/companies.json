@@ -1,0 +1,27 @@
+{
+  "OTE": {
+    "name": "ΟΤΕ Α.Ε.",
+    "sector": "Telecommunications",
+    "aliases": ["ΟΤΕ", "Ομίλου ΟΤΕ", "Cosmote", "Hellenic Telecommunications", "Οργανισμός Τηλεπικοινωνιών"]
+  },
+  "JUMBO": {
+    "name": "Jumbo Α.Ε.Ε.",
+    "sector": "Retail",
+    "aliases": ["Jumbo", "Τζάμπο"]
+  },
+  "PPC": {
+    "name": "ΔΕΗ Α.Ε.",
+    "sector": "Energy / Utilities",
+    "aliases": ["ΔΕΗ", "Δημόσια Επιχείρηση Ηλεκτρισμού", "Δημόσιας Επιχείρησης Ηλεκτρισμού", "Public Power Corporation"]
+  },
+  "MOH": {
+    "name": "Motor Oil (Hellas) Διυλιστήρια Κορίνθου Α.Ε.",
+    "sector": "Energy / Refining",
+    "aliases": ["Motor Oil", "Μότορ Όιλ", "Διυλιστήρια Κορίνθου"]
+  },
+  "ETE": {
+    "name": "Εθνική Τράπεζα της Ελλάδος Α.Ε.",
+    "sector": "Banking",
+    "aliases": ["Εθνική Τράπεζα", "Εθνικής Τράπεζας", "Εθνική", "Εθνικής", "National Bank of Greece", "NBG"]
+  }
+}

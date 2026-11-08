@@ -1,0 +1,7 @@
+// FORMAT EXAMPLES ONLY - the figures and pages below are placeholders, not real data.
+// Write your own questions in eval/questions.jsonl by reading the actual reports.
+// Lines starting with // are ignored.
+{"id": "ex-01", "question": "Ποια ήταν τα καθαρά κέρδη μετά από φόρους του ομίλου EXAMPLE για τη χρήση 2024;", "company": "EXAMPLE", "year": 2024, "gold_pages": [12], "type": "numeric", "answer": "123,4 εκατ. €", "answer_value": 123400000}
+{"id": "ex-02", "question": "Πόσα μέλη έχει το Διοικητικό Συμβούλιο της EXAMPLE;", "company": "EXAMPLE", "year": 2024, "gold_pages": [88, 89], "type": "text", "answer": "εννέα μέλη"}
+{"id": "ex-03", "question": "Ποιος είναι ο ορκωτός ελεγκτής της EXAMPLE για το 2024;", "company": "EXAMPLE", "year": 2024, "gold_pages": [140], "type": "text", "answer": "Example Ορκωτοί Ελεγκτές Α.Ε."}
+{"id": "ex-04", "question": "Πόσα ηλεκτρικά αυτοκίνητα πούλησε η EXAMPLE το 2024;", "company": "EXAMPLE", "year": 2024, "gold_pages": [], "type": "unanswerable"}

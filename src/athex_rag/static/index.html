@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>athex-rag</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd;
+    --accent: #1f5fbf; --accent-soft: #e8f0fb; --warn: #9a5b00; --warn-soft: #fdf3e2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151514; --panel: #1f1f1d; --text: #ecebe6; --muted: #9c9b95; --line: #33332f;
+      --accent: #7aa7ec; --accent-soft: #1f2b3d; --warn: #e6b562; --warn-soft: #33291a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  form { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  textarea { width: 100%; min-height: 72px; resize: vertical; border: 1px solid var(--line);
+             border-radius: 8px; padding: 10px 12px; font: inherit; background: var(--bg); color: var(--text); }
+  .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+  select, button { font: inherit; border-radius: 8px; border: 1px solid var(--line);
+                   padding: 8px 12px; background: var(--bg); color: var(--text); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; margin-left: auto; cursor: pointer; }
+  button.primary:disabled { opacity: .6; cursor: progress; }
+  .examples { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .examples button { font-size: 13px; padding: 4px 10px; cursor: pointer; color: var(--muted); }
+  .answer { margin-top: 24px; background: var(--panel); border: 1px solid var(--line);
+            border-radius: 12px; padding: 18px 20px; white-space: pre-wrap; }
+  .answer.refused { background: var(--warn-soft); border-color: var(--warn); }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .cite { display: inline-block; min-width: 22px; padding: 0 6px; margin: 0 1px; border-radius: 6px;
+          background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 600;
+          border: 0; cursor: pointer; line-height: 20px; }
+  h2 { font-size: 15px; margin: 28px 0 10px; color: var(--muted); font-weight: 600; }
+  .src { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+         padding: 12px 14px; margin-bottom: 10px; transition: border-color .2s; }
+  .src.cited { border-left: 3px solid var(--accent); }
+  .src.flash { border-color: var(--accent); }
+  .src header { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .src header b { font-size: 14px; }
+  .tag { font-size: 12px; color: var(--muted); }
+  .src a { margin-left: auto; font-size: 13px; color: var(--accent); text-decoration: none; }
+  .snippet { margin-top: 8px; font-size: 13px; color: var(--muted); white-space: pre-wrap;
+             max-height: 9.5em; overflow: hidden; }
+  .error { color: var(--warn); margin-top: 16px; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>athex-rag</h1>
+  <p class="sub">Ερωτήσεις σε ετήσιες οικονομικές εκθέσεις εισηγμένων του Χρηματιστηρίου Αθηνών. Κάθε απάντηση παραπέμπει στη σελίδα της πηγής.</p>
+
+  <form id="form">
+    <textarea id="q" placeholder="π.χ. Ποια ήταν τα καθαρά κέρδη της Jumbo το 2025;" required></textarea>
+    <div class="row">
+      <select id="company"><option value="">Όλες οι εταιρείες</option></select>
+      <select id="year"><option value="">Όλα τα έτη</option></select>
+      <button class="primary" id="go" type="submit">Ερώτηση</button>
+    </div>
+    <div class="examples" id="examples"></div>
+  </form>
+
+  <div id="out"></div>
+  <footer>Οι απαντήσεις παράγονται από LLM μόνο με βάση τα αποσπάσματα που ανακτήθηκαν. Ελέγξτε την πηγή πριν χρησιμοποιήσετε έναν αριθμό.</footer>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => s.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const EXAMPLES = [
+  "Ποιος είναι ο ορκωτός ελεγκτής του ΟΤΕ;",
+  "Πόσους εργαζόμενους απασχολεί η ΔΕΗ;",
+  "Ποιο μέρισμα προτείνεται για τη χρήση 2025 από τη Jumbo;",
+  "Ποιους κινδύνους αναφέρει η Motor Oil;",
+];
+EXAMPLES.forEach((t) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.textContent = t;
+  b.onclick = () => { $("q").value = t; $("q").focus(); };
+  $("examples").appendChild(b);
+});
+
+fetch("/documents").then((r) => r.ok ? r.json() : { documents: [] }).then(({ documents }) => {
+  const companies = new Map(), years = new Set();
+  documents.forEach((d) => { companies.set(d.company, d.company_name); years.add(d.year); });
+  [...companies].sort((a, b) => a[1].localeCompare(b[1], "el")).forEach(([code, name]) =>
+    $("company").insertAdjacentHTML("beforeend", `<option value="${esc(code)}">${esc(name)}</option>`));
+  [...years].sort().reverse().forEach((y) =>
+    $("year").insertAdjacentHTML("beforeend", `<option value="${y}">${y}</option>`));
+}).catch(() => {});
+
+function flash(n) {
+  const el = document.querySelector(`[data-n="${n}"]`);
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200);
+}
+
+function render(data) {
+  const answer = esc(data.answer).replace(/\[(\d{1,2})\]/g,
+    (_, n) => `<button class="cite" onclick="flash(${n})">${n}</button>`);
+  let html = `<div class="answer${data.refused ? " refused" : ""}">${answer}</div>`;
+  html += `<div class="meta">${data.sources.length} πηγές · ${data.latency_s}s</div>`;
+  if (data.sources.length) html += "<h2>Πηγές</h2>";
+  data.sources.forEach((s) => {
+    html += `<div class="src${s.cited ? " cited" : ""}" data-n="${s.n}">
+      <header><span class="cite">${s.n}</span><b>${esc(s.company_name)} · ${s.year}</b>
+      <span class="tag">σελ. ${s.page}${s.kind === "table" ? " · πίνακας" : ""}${s.cited ? " · αναφέρεται" : ""}</span>
+      <a href="/pdf/${encodeURIComponent(s.doc_id)}#page=${s.page}" target="_blank" rel="noopener">Άνοιγμα PDF ↗</a></header>
+      <div class="snippet">${esc(s.snippet)}</div></div>`;
+  });
+  $("out").innerHTML = html;
+}
+
+$("form").onsubmit = async (e) => {
+  e.preventDefault();
+  const question = $("q").value.trim();
+  if (question.length < 3) return;
+  $("go").disabled = true; $("go").textContent = "Αναζήτηση…";
+  $("out").innerHTML = "";
+  try {
+    const r = await fetch("/ask", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, company: $("company").value || null,
+                             year: $("year").value ? Number($("year").value) : null }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    render(data);
+  } catch (err) {
+    $("out").innerHTML = `<p class="error">Σφάλμα: ${esc(String(err.message || err))}</p>`;
+  } finally {
+    $("go").disabled = false; $("go").textContent = "Ερώτηση";
+  }
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.env
+
+# large / generated
+data/raw/*.pdf
+index/
+reports/*.jsonl
+data/cache/
+indexes/
+reports/runs/
