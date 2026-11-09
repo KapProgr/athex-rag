@@ -32,8 +32,8 @@
 
 ## Bullets για το CV
 
-**ATHEX-RAG: Cited Q&A over Greek Annual Financial Reports** · Python, FastAPI, PyMuPDF, BM25, sentence-transformers, LLMs (Groq / Ollama) · github.com/KapProgr/athex-rag
-- Built a retrieval-augmented QA system over 10 annual reports of 5 Athens Stock Exchange companies (~4,100 Greek pages, 2,500+ tables) that answers with page-level citations or refuses; FastAPI backend and web UI that opens the cited PDF page.
+**ATHEX-RAG: Cited Q&A over Greek Annual Financial Reports** · Python, FastAPI, PyMuPDF, BM25, sentence-transformers, LLMs (Groq / Ollama) · github.com/KapProgr/athex-rag · live demo: athex-rag.onrender.com
+- Built a retrieval-augmented QA system over 10 annual reports of 5 Athens Stock Exchange companies (~4,100 Greek pages, 2,500+ tables) that answers with page-level citations or refuses; FastAPI backend and web UI that opens the cited PDF page, deployed as a public demo (Docker, Render) with rate limiting.
 - Designed a 93-question evaluation set with automatically verified evidence: 84% of answers correct and 100% of unanswerable questions correctly refused (no hallucinated answers).
 - Ran retrieval ablations showing BM25 with Greek stemming beats multilingual dense and hybrid retrieval on financial text (71% vs 61% / 68% hit@5); error analysis traced most failures to retrieval, not the LLM.
 - Engineered Greek number parsing, cell-level table extraction and crash-isolated PDF parsing; 65 unit tests, GitHub Actions CI, Docker.

@@ -2,6 +2,8 @@
 
 **Ask questions about Greek listed companies' annual reports and get answers with page-level citations, measured on a 93-question evaluation set with verified evidence.**
 
+**Live demo: [athex-rag.onrender.com](https://athex-rag.onrender.com)** (free hosting: the first request after a quiet period takes about a minute while the server wakes up).
+
 Annual financial reports of Athens Stock Exchange (ATHEX) companies are 200–670 page Greek PDFs full of tables. `athex-rag` parses them (including tables), retrieves the relevant passages with keyword, dense or hybrid search, and has an LLM (local via Ollama, or hosted via Groq) answer *only* from those passages, citing `[company, year, page]` for every claim, or refusing when the answer is not there.
 
 The point of the project is the **evaluation**: every design choice (chunk size, keyword vs dense vs hybrid retrieval, table extraction, embedding model, reranking, LLM) is compared on the same questions with known answers and known source pages, and failures are broken down by cause.
