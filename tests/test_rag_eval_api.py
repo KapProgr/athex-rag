@@ -220,3 +220,8 @@ def test_rounded_different_figure_is_not_support():
     assert not supports(chunk, item)
     same = Chunk("PPC_2025:p20:t0", "PPC_2025", "PPC", 2025, 20, "καθαρά κέρδη 359,45 εκατ.")
     assert supports(same, item)
+
+
+def test_api_key_whitespace_is_stripped(monkeypatch):
+    monkeypatch.setenv("LLM_API_KEY", "  gsk_abc\r\n")
+    assert make_llm("groq:m").api_key == "gsk_abc"

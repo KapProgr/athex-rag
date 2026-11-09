@@ -69,7 +69,9 @@ class OpenAICompatibleClient:
         name_prefix: str = "openai-compatible",
     ):
         self.model, self.base_url, self.timeout = model, base_url.rstrip("/"), timeout
-        self.api_key = api_key or os.environ.get("LLM_API_KEY", "")
+        # strip: a key pasted into a dashboard often carries a trailing newline, which
+        # makes the Authorization header invalid
+        self.api_key = (api_key or os.environ.get("LLM_API_KEY", "")).strip()
         self.max_retries = max_retries
         self.name = f"{name_prefix}:{model}"
 
