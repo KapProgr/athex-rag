@@ -53,6 +53,8 @@ class Index:
         vectors: np.ndarray,
         embedder_name: str,
         stem_prefix: int | None = 6,
+        k1: float = 0.9,  # tuned on the dev questions, see reports/ablation.md
+        b: float = 0.4,
     ):
         if len(chunks) != len(vectors):
             raise ValueError("chunks and vectors must have the same length")
@@ -60,7 +62,7 @@ class Index:
         self.vectors = vectors.astype(np.float32)
         self.embedder_name = embedder_name
         self.stem_prefix = stem_prefix
-        self.bm25 = BM25([search_tokens(c.text, stem_prefix) for c in chunks])
+        self.bm25 = BM25([search_tokens(c.text, stem_prefix) for c in chunks], k1=k1, b=b)
 
     def query_tokens(self, query: str) -> list[str]:
         return search_tokens(query, self.stem_prefix)
@@ -80,7 +82,9 @@ class Index:
         (folder / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
     @classmethod
-    def load(cls, folder: Path, stem_prefix: int | None = 6) -> Index:
+    def load(
+        cls, folder: Path, stem_prefix: int | None = 6, k1: float = 0.9, b: float = 0.4
+    ) -> Index:
         plain, packed = folder / "chunks.jsonl", folder / "chunks.jsonl.gz"
         opener = (
             (lambda: open(plain, encoding="utf-8"))
@@ -91,7 +95,7 @@ class Index:
             chunks = [Chunk.from_dict(json.loads(line)) for line in f if line.strip()]
         vectors = np.load(folder / "vectors.npy")
         meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
-        return cls(chunks, vectors, meta["embedder"], stem_prefix)
+        return cls(chunks, vectors, meta["embedder"], stem_prefix, k1, b)
 
     @property
     def companies(self) -> list[str]:

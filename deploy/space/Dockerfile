@@ -13,6 +13,7 @@ ENV ATHEX_INDEX_DIR=/app/index \
     ATHEX_RETRIEVAL=bm25 \
     ATHEX_COMPANIES=/app/data/companies.json \
     ATHEX_SOURCES=/app/data/sources.json \
+    ATHEX_GLOSSARY=/app/data/glossary.json \
     ATHEX_PDF_DIR=/app/no-pdfs \
     ATHEX_WARMUP=1
 EXPOSE 7860

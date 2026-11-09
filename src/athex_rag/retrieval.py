@@ -71,6 +71,7 @@ class Retriever:
         reranker=None,
         rerank_candidates: int = 20,
         aliases: dict[str, list[str]] | None = None,
+        glossary: dict[str, list[str]] | None = None,
     ):
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")
@@ -81,6 +82,19 @@ class Retriever:
         self.index, self.embedder, self.mode, self.candidates = index, embedder, mode, candidates
         self.reranker, self.rerank_candidates = reranker, rerank_candidates
         self.aliases = aliases or {}
+        # phrase -> extra search terms (see data/glossary.json)
+        self.glossary = {_words(k): v for k, v in (glossary or {}).items()}
+
+    def keyword_tokens(self, query: str) -> list[str]:
+        """Query tokens for BM25, expanded with glossary terms for phrases in the query
+        (e.g. "ελεγκτική εταιρεία" also searches "ορκωτός ελεγκτής λογιστής", "ΣΟΕΛ")."""
+        tokens = self.index.query_tokens(query)
+        norm = _words(query)
+        for phrase, extra in self.glossary.items():
+            if phrase in norm:
+                for term in extra:
+                    tokens += self.index.query_tokens(term)
+        return tokens
 
     def _mask(self, company: str | None, year: int | None) -> np.ndarray:
         mask = np.ones(len(self.index.chunks), dtype=bool)
@@ -115,7 +129,7 @@ class Retriever:
             dense_scores = self.index.vectors @ self.embedder.embed_query(query)
             dense = self._ranking(dense_scores, mask)
         if self.mode in ("bm25", "hybrid"):
-            bm25_scores = self.index.bm25.scores(self.index.query_tokens(query))
+            bm25_scores = self.index.bm25.scores(self.keyword_tokens(query))
             # chunks with zero keyword overlap are not candidates
             bm25 = [i for i in self._ranking(bm25_scores, mask) if bm25_scores[i] > 0]
 

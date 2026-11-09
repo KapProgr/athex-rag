@@ -13,9 +13,16 @@ import argparse
 import sys
 from pathlib import Path
 
-from .companies import load_aliases
+from .companies import load_aliases, load_glossary
 from .embeddings import make_embedder
-from .evaluation import evaluate_item, load_items, save_run, summarize, to_markdown
+from .evaluation import (
+    error_report,
+    evaluate_item,
+    load_items,
+    save_run,
+    summarize,
+    to_markdown,
+)
 from .index import Index
 from .ingest import chunks_for_document, iter_pdfs
 from .llm import make_llm
@@ -39,6 +46,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
             args.overlap,
             with_tables=not args.no_tables,
             cache_dir=Path(args.cache),
+            layout=args.layout,
         )
         n_tables = sum(c.kind == "table" for c in doc_chunks)
         print(f"{pdf.name}: {len(doc_chunks)} chunks ({n_tables} tables)")
@@ -59,6 +67,7 @@ def _load(index_dir: str, mode: str, reranker: str | None = None) -> Retriever:
         mode=mode,
         reranker=make_reranker(reranker),
         aliases=load_aliases(),
+        glossary=load_glossary(),
     )
 
 
@@ -87,6 +96,8 @@ def cmd_eval(args: argparse.Namespace) -> int:
         rows[name] = summary
         print(f"done: {name}")
     table = to_markdown(rows)
+    if llm:
+        table += "\n\n## Error analysis\n\n" + error_report(results, items, 5)
     print("\n" + table)
     (Path(args.out) / "results.md").write_text(table + "\n", encoding="utf-8")
     return 0
@@ -181,6 +192,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--overlap", type=int, default=200)
     p.add_argument("--no-tables", action="store_true")
     p.add_argument("--cache", default="data/cache", help="parsed-page cache folder")
+    p.add_argument(
+        "--layout",
+        choices=["columns", "sorted"],
+        default="columns",
+        help="read two-column pages column by column (default)",
+    )
     p.set_defaults(func=cmd_ingest)
 
     p = sub.add_parser("ask", help="ask one question")

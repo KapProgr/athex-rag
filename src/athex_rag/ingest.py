@@ -61,6 +61,61 @@ def _page_tables(page) -> list[str]:
     return tables
 
 
+LAYOUTS = ("sorted", "columns")
+
+
+def _column_split(page) -> float | None:
+    """x-coordinate between the two columns if the page is laid out in two columns of
+    running text, else None. Each PyMuPDF text block belongs to one column, but sorting
+    lines by height interleaves the columns (Motor Oil prints group figures on the left
+    and parent-company figures on the right, so rows of the two get mixed).
+
+    Wide tables also have cells on both sides of the middle, so columns must consist of
+    *wide* blocks (median >= 30% of the page width); narrow cells do not qualify."""
+    width = page.rect.width
+    mid, gap = width / 2, width * 0.04
+    blocks = [b for b in page.get_text("blocks") if b[6] == 0 and b[4].strip()]
+    left = [b for b in blocks if b[2] <= mid + gap]
+    right = [b for b in blocks if b[0] >= mid - gap and b[2] > mid + gap]
+    spanning = len(blocks) - len(left) - len(right)
+    if len(left) < 4 or len(right) < 4 or spanning > 2:
+        return None
+
+    def median_width(bs: list) -> float:
+        widths = sorted(b[2] - b[0] for b in bs)
+        return widths[len(widths) // 2]
+
+    if min(median_width(left), median_width(right)) < 0.3 * width:
+        return None
+    # split in the widest empty vertical band around the middle
+    left_edge = max(b[2] for b in left)
+    right_edge = min(b[0] for b in right)
+    return (left_edge + right_edge) / 2 if left_edge < right_edge else mid
+
+
+def page_text(page, layout: str = "sorted") -> str:
+    """Page text in reading order. ``columns`` reads a two-column page column by column
+    (rows inside each column stay intact) and falls back to ``sorted`` otherwise."""
+    if layout == "columns":
+        split = _column_split(page)
+        if split is not None:
+            import pymupdf
+
+            r = page.rect
+            left = page.get_text("text", clip=pymupdf.Rect(r.x0, r.y0, split, r.y1), sort=True)
+            right = page.get_text("text", clip=pymupdf.Rect(split, r.y0, r.x1, r.y1), sort=True)
+            return f"{left.rstrip()}\n\n{right.lstrip()}"
+    return page.get_text("text", sort=True)
+
+
+def column_texts(path: Path) -> list[str]:
+    """Text of every page with ``layout="columns"`` (text only: fast, no tables)."""
+    import pymupdf
+
+    with pymupdf.open(path) as doc:
+        return [page_text(page, "columns") for page in doc]
+
+
 def _extract_range(
     path: str, start: int, end: int, with_tables: bool
 ) -> list[tuple[int, str, list[str]]]:
@@ -71,7 +126,7 @@ def _extract_range(
     with pymupdf.open(path) as doc:
         for index in range(start, min(end, len(doc))):
             page = doc[index]
-            text = page.get_text("text", sort=True)
+            text = page_text(page, "sorted")
             if with_tables and os.environ.get("ATHEX_TEST_CRASH_PAGE") == str(index + 1):
                 os._exit(139)  # test hook: simulate a MuPDF segfault on this page
             out.append((index + 1, text, _page_tables(page) if with_tables else []))
@@ -142,29 +197,77 @@ def file_key(path: Path) -> str:
     return f"{size}-{digest.hexdigest()[:16]}"
 
 
-def load_pages(path: Path, cache_dir: Path | None = None) -> list[tuple[int, str, list[str]]]:
+def load_pages(
+    path: Path, cache_dir: Path | None = None, layout: str = "sorted"
+) -> list[tuple[int, str, list[str]]]:
     """``extract_pages`` with an on-disk JSON cache.
 
     Table detection on a 300-page report takes minutes; experiments re-chunk the same
     PDFs many times, so parsed pages are cached, keyed on file size + content hash
-    (not mtime, so a cache built on one machine is valid on another).
+    (not mtime, so a cache built on one machine is valid on another). Other text layouts
+    reuse the cached tables and only re-read the text (seconds).
     """
+    if layout not in LAYOUTS:
+        raise ValueError(f"layout must be one of {LAYOUTS}")
     if cache_dir is None:
-        return extract_pages(path)
+        pages = extract_pages(path)
+        if layout != "sorted":
+            texts = column_texts(path)
+            pages = [(n, texts[n - 1], tabs) for n, _, tabs in pages]
+        return pages
     key = file_key(path)
     cache_file = cache_dir / f"{path.stem}.json"
+    cached = None
     if cache_file.exists():
         cached = json.loads(cache_file.read_text(encoding="utf-8"))
-        if cached.get("key") == key:
-            return [(p["page"], p["text"], p["tables"]) for p in cached["pages"]]
-    pages = extract_pages(path)
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "key": key,
-        "pages": [{"page": n, "text": t, "tables": tabs} for n, t, tabs in pages],
-    }
-    cache_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        if cached.get("key") != key:
+            cached = None
+    if cached is None:
+        cached = {
+            "key": key,
+            "pages": [{"page": n, "text": t, "tables": tabs} for n, t, tabs in extract_pages(path)],
+        }
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(json.dumps(cached, ensure_ascii=False), encoding="utf-8")
+    pages = [(p["page"], p["text"], p["tables"]) for p in cached["pages"]]
+    if layout != "sorted":
+        field = f"text_{layout}"
+        if field not in cached:
+            cached[field] = column_texts(path)
+            cache_file.write_text(json.dumps(cached, ensure_ascii=False), encoding="utf-8")
+        texts = cached[field]
+        pages = [(n, texts[n - 1], tabs) for n, _, tabs in pages]
     return pages
+
+
+def page_headings(texts: list[str], max_len: int = 120) -> list[str]:
+    """A short heading per page: its first meaningful line(s).
+
+    Lines repeated on many pages (running headers such as the company name and report
+    title) carry no information and are skipped. A table row like
+    "Κύκλος εργασιών 5.1 1.232.904.830" says nothing about *which* statement it belongs
+    to; the page heading ("ΚΑΤΑΣΤΑΣΗ ΑΠΟΤΕΛΕΣΜΑΤΩΝ") does.
+    """
+
+    def lines(text: str) -> list[str]:
+        return [" ".join(line.split()) for line in text.splitlines() if line.strip()]
+
+    counts: dict[str, int] = {}
+    for text in texts:
+        for line in set(lines(text)[:6]):
+            counts[line] = counts.get(line, 0) + 1
+    common = {line for line, n in counts.items() if n >= max(3, len(texts) * 0.2)}
+    headings = []
+    for text in texts:
+        picked: list[str] = []
+        for line in lines(text)[:8]:
+            if line in common or sum(ch.isalpha() for ch in line) < 4:
+                continue  # running header, page number, or a row of figures
+            picked.append(line[:max_len])
+            if len(picked) == 2:
+                break
+        headings.append(" · ".join(picked))
+    return headings
 
 
 def chunks_for_document(
@@ -173,20 +276,31 @@ def chunks_for_document(
     overlap_chars: int = 200,
     with_tables: bool = True,
     cache_dir: Path | None = None,
+    layout: str = "columns",
+    headings: bool = False,
 ) -> list[Chunk]:
+    """Chunks of one report. ``layout``: see ``page_text``. ``headings``: prefix every
+    chunk with its page heading (as ``[heading]``) so retrieval and the LLM know which
+    section a fragment of text or a table row comes from."""
     company, year = parse_doc_name(path)
     doc_id = f"{company}_{year}"
     chunks: list[Chunk] = []
-    pages = (
-        load_pages(path, cache_dir)
-        if cache_dir is not None
-        else extract_pages(path, with_tables=with_tables)
-    )
-    for page_no, text, tables in pages:
+    if cache_dir is not None:
+        pages = load_pages(path, cache_dir, layout)
+    else:
+        pages = extract_pages(path, with_tables=with_tables)
+        if layout != "sorted":
+            texts = column_texts(path)
+            pages = [(n, texts[n - 1], tabs) for n, _, tabs in pages]
+    heads = page_headings([t for _, t, _ in pages]) if headings else [""] * len(pages)
+    for (page_no, text, tables), head in zip(pages, heads, strict=True):
+        prefix = f"[{head}]\n" if head else ""
         if not with_tables:
             tables = []
         for i, piece in enumerate(chunk_page(text, max_chars, overlap_chars)):
-            chunks.append(Chunk(f"{doc_id}:p{page_no}:t{i}", doc_id, company, year, page_no, piece))
+            chunks.append(
+                Chunk(f"{doc_id}:p{page_no}:t{i}", doc_id, company, year, page_no, prefix + piece)
+            )
         for i, table in enumerate(tables):
             # Long tables are kept whole up to 3x the text budget; retrieval works on
             # the header + rows, and the LLM needs complete rows to read figures.
@@ -197,7 +311,7 @@ def chunks_for_document(
                     company,
                     year,
                     page_no,
-                    table[: max_chars * 3],
+                    prefix + table[: max_chars * 3],
                     kind="table",
                 )
             )

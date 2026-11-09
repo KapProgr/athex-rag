@@ -59,7 +59,7 @@ def stage(dest: Path, chunk: int) -> None:
     )
     shutil.copy(ROOT / "pyproject.toml", dest)
     (dest / "data").mkdir()
-    for name in ("companies.json", "sources.json"):
+    for name in ("companies.json", "sources.json", "glossary.json"):
         shutil.copy(ROOT / "data" / name, dest / "data" / name)
     shutil.copy(ROOT / "deploy" / "space" / "Dockerfile", dest)
     shutil.copy(ROOT / "deploy" / "space" / "README.md", dest)  # also the package readme

@@ -26,3 +26,13 @@ def load_aliases(path: Path | None = None) -> dict[str, list[str]]:
 
 def display_name(code: str, companies: dict[str, dict]) -> str:
     return companies.get(code, {}).get("name", code)
+
+
+def load_glossary(path: Path | None = None) -> dict[str, list[str]]:
+    """Financial-term query expansions (``data/glossary.json``, override with
+    ``ATHEX_GLOSSARY``). Keys starting with "_" are comments."""
+    path = path or Path(os.environ.get("ATHEX_GLOSSARY", "data/glossary.json"))
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {k: v for k, v in data.items() if not k.startswith("_")}

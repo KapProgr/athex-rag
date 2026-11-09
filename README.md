@@ -56,6 +56,24 @@ The second column exists because the same figure often appears on several pages 
 4. **Table chunks help a little** (+2.6 points hit@5 for BM25 at chunk 600).
 5. **One question is ambiguous in the source itself.** PPC's 2024 report gives total investments as €3 δισ. on one page and €1.875 εκατ. on another. Both models answered the second. Real documents are not always consistent, and an evaluation set has to be read with that in mind.
 
+### Improving retrieval without overfitting
+
+The error analysis pointed at retrieval, so the next round of changes targeted it, with a **dev/test split**: questions on the 2024 reports (34 answerable) were used to look at failures and tune; questions on the 2025 reports (43) were only measured. The two years ask parallel questions, so a real fix should carry over. Reproduce with `python scripts/ablation.py` ([reports/ablation.md](reports/ablation.md)).
+
+| step (BM25, k = 5) | dev answer@5 | test answer@5 | test hit@5 | test MRR |
+|---|---|---|---|---|
+| baseline | 88.2% | 74.4% | 62.8% | 0.461 |
+| + column-aware text extraction | 88.2% | 74.4% | 62.8% | 0.460 |
+| (+ page headings on chunks: not kept) | 88.2% | 74.4% | 60.5% | 0.433 |
+| + financial glossary query expansion | 94.1% | 83.7% | 74.4% | 0.510 |
+| + BM25 tuning (k1 = 0.9, b = 0.4, chosen on dev) | 94.1% | **83.7%** | **79.1%** | **0.540** |
+
+- **The gains transfer to the unseen test questions:** +9.3 points answer@5 and +16.3 points hit@5, with 4 test questions fixed and none broken. Three of the four are auditor questions.
+- **Glossary expansion** (`data/glossary.json`, 10 general reporting terms such as `ελεγκτική εταιρεία → ορκωτός ελεγκτής λογιστής, ΣΟΕΛ`) did most of the work: questions use everyday words, while reports use the formal ones.
+- **Column-aware extraction** barely moves retrieval but separates group and parent-company rows on two-column pages (Motor Oil, NBG), which matters for the LLM reading the figures.
+- **Page headings did not help** and were dropped. Not every reasonable idea survives measurement.
+- Still missing on test: 7 questions, all figures inside financial-statement tables. That is where a cross-encoder reranker or a table-aware retriever would come next.
+
 ### Latest automatic run
 
 <!-- RESULTS:START -->

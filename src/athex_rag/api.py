@@ -29,7 +29,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
-from .companies import display_name, load_aliases, load_companies
+from .companies import display_name, load_aliases, load_companies, load_glossary
 from .embeddings import make_embedder
 from .index import Index
 from .llm import make_llm
@@ -117,6 +117,7 @@ def get_rag() -> RAG:
         mode=os.environ.get("ATHEX_RETRIEVAL", default_mode),
         reranker=make_reranker(os.environ.get("ATHEX_RERANKER")),
         aliases=load_aliases(),
+        glossary=load_glossary(),
     )
     return RAG(retriever, make_llm())
 

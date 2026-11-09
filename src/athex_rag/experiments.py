@@ -20,7 +20,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .companies import load_aliases
+from .companies import load_aliases, load_glossary
 from .embeddings import make_embedder
 from .evaluation import (
     EvalItem,
@@ -142,6 +142,7 @@ class Runner:
             mode=cfg.mode,
             reranker=reranker,
             aliases=self.aliases,
+            glossary=load_glossary(),
         )
         rag = RAG(retriever, make_llm(cfg.llm), k=self.plan.k) if cfg.llm else None
         start = time.perf_counter()
