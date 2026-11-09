@@ -151,9 +151,15 @@ def make_llm(spec: str | None = None) -> LLMClient:
     if spec.startswith("ollama:"):
         host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
         return OllamaClient(spec.removeprefix("ollama:"), host=host)
+    # a web demo should fail fast instead of waiting out a long rate limit
+    retries = int(os.environ.get("ATHEX_LLM_MAX_RETRIES", "8"))
     if spec.startswith("groq:"):
-        return OpenAICompatibleClient(spec.removeprefix("groq:"), GROQ_BASE_URL, name_prefix="groq")
+        return OpenAICompatibleClient(
+            spec.removeprefix("groq:"), GROQ_BASE_URL, name_prefix="groq", max_retries=retries
+        )
     if spec.startswith("openai:"):
         model, _, base_url = spec.removeprefix("openai:").partition("@")
-        return OpenAICompatibleClient(model, base_url or "https://api.openai.com/v1")
+        return OpenAICompatibleClient(
+            model, base_url or "https://api.openai.com/v1", max_retries=retries
+        )
     raise ValueError(f"unknown LLM spec {spec!r}")

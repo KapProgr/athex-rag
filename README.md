@@ -118,6 +118,18 @@ Requirements: Python 3.10+, [Ollama](https://ollama.com), and the annual report 
 
 Then open <http://localhost:8000>. Clicking a citation highlights its source, and "Open PDF" jumps to the cited page.
 
+### Deploying the live demo (Hugging Face Spaces)
+
+The demo runs the best configuration from the evaluation (BM25 + Greek stemming) with a hosted LLM, so it needs no PyTorch and fits a free CPU Space (~320 MB RAM, ~0.1 s retrieval). PDFs are not uploaded; "Open PDF" opens the company's official copy at the cited page (`data/sources.json`).
+
+```powershell
+pip install -e ".[deploy]"
+setx HF_TOKEN "<write token from huggingface.co/settings/tokens>"   # once, then a new PowerShell
+python scripts\deploy_space.py                                      # --dry-run to only build the folder
+```
+
+The script creates `<your-username>/athex-rag`, stores `LLM_API_KEY` as a Space **secret**, and sets per-visitor (6/min) and daily (300) limits, so the public demo cannot exhaust the LLM quota.
+
 ### Using a hosted LLM (Groq) instead of Ollama
 
 Without a GPU, a local 7B model takes about a minute per question. A free [Groq](https://console.groq.com) key is much faster:

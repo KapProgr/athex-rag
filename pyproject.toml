@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 embeddings = ["sentence-transformers>=3.0"]
 dev = ["pytest>=8", "ruff>=0.5"]
+deploy = ["huggingface_hub>=0.24"]
 
 [project.scripts]
 athex-rag = "athex_rag.cli:main"

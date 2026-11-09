@@ -15,3 +15,4 @@ data/cache/
 indexes/
 reports/runs/
 reports/rescored/
+build/

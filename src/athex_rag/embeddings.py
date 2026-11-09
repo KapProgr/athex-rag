@@ -81,7 +81,22 @@ class HashingEmbedder:
         return _l2(self._vector(text))
 
 
+class NullEmbedder:
+    """No vectors at all: for keyword-only (BM25) deployments, e.g. the hosted demo,
+    which then needs neither PyTorch nor a model download."""
+
+    name = "none"
+
+    def embed_documents(self, texts: list[str]) -> np.ndarray:
+        return np.zeros((len(texts), 0), dtype=np.float32)
+
+    def embed_query(self, text: str) -> np.ndarray:
+        raise RuntimeError("this index has no embeddings; use retrieval mode 'bm25'")
+
+
 def make_embedder(name: str) -> Embedder:
+    if name == "none":
+        return NullEmbedder()
     if name.startswith("hashing"):
         dim = int(name.split("-")[1]) if "-" in name else 512
         return HashingEmbedder(dim)

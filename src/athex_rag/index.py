@@ -6,6 +6,7 @@ reports fit comfortably in memory, and every scoring step stays inspectable.
 
 from __future__ import annotations
 
+import gzip
 import json
 import math
 from collections import Counter
@@ -80,7 +81,13 @@ class Index:
 
     @classmethod
     def load(cls, folder: Path, stem_prefix: int | None = 6) -> Index:
-        with open(folder / "chunks.jsonl", encoding="utf-8") as f:
+        plain, packed = folder / "chunks.jsonl", folder / "chunks.jsonl.gz"
+        opener = (
+            (lambda: open(plain, encoding="utf-8"))
+            if plain.exists()
+            else (lambda: gzip.open(packed, "rt", encoding="utf-8"))
+        )
+        with opener() as f:
             chunks = [Chunk.from_dict(json.loads(line)) for line in f if line.strip()]
         vectors = np.load(folder / "vectors.npy")
         meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))

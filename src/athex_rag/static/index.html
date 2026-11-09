@@ -51,6 +51,7 @@
              max-height: 9.5em; overflow: hidden; }
   .error { color: var(--warn); margin-top: 16px; }
   footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
+  footer a { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -59,7 +60,7 @@
   <p class="sub">Ερωτήσεις σε ετήσιες οικονομικές εκθέσεις εισηγμένων του Χρηματιστηρίου Αθηνών. Κάθε απάντηση παραπέμπει στη σελίδα της πηγής.</p>
 
   <form id="form">
-    <textarea id="q" placeholder="π.χ. Ποια ήταν τα καθαρά κέρδη της Jumbo το 2025;" required></textarea>
+    <textarea id="q" placeholder="π.χ. Ποια ήταν τα κέρδη μετά από φόρους του Ομίλου Jumbo το 2025;" maxlength="500" required></textarea>
     <div class="row">
       <select id="company"><option value="">Όλες οι εταιρείες</option></select>
       <select id="year"><option value="">Όλα τα έτη</option></select>
@@ -69,16 +70,22 @@
   </form>
 
   <div id="out"></div>
-  <footer>Οι απαντήσεις παράγονται από LLM μόνο με βάση τα αποσπάσματα που ανακτήθηκαν. Ελέγξτε την πηγή πριν χρησιμοποιήσετε έναν αριθμό.</footer>
+  <footer>
+    Δεδομένα: ετήσιες οικονομικές εκθέσεις 2024–2025 των ΟΤΕ, Jumbo, ΔΕΗ, Motor Oil και Εθνικής Τράπεζας.
+    Οι απαντήσεις παράγονται από LLM μόνο με βάση τα αποσπάσματα που ανακτήθηκαν. Ελέγξτε την πηγή πριν χρησιμοποιήσετε έναν αριθμό.
+    Δεν αποτελεί επενδυτική συμβουλή.<br>
+    Κώδικας, αξιολόγηση και αποτελέσματα: <a href="https://github.com/KapProgr/athex-rag" target="_blank" rel="noopener">github.com/KapProgr/athex-rag</a>
+  </footer>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => s.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const EXAMPLES = [
-  "Ποιος είναι ο ορκωτός ελεγκτής του ΟΤΕ;",
-  "Πόσους εργαζόμενους απασχολεί η ΔΕΗ;",
-  "Ποιο μέρισμα προτείνεται για τη χρήση 2025 από τη Jumbo;",
-  "Ποιους κινδύνους αναφέρει η Motor Oil;",
+  "Ποιο μέρισμα ανά μετοχή προτείνει η ΔΕΗ για τη χρήση 2025;",
+  "Ποιος ήταν ο δείκτης CET1 της Εθνικής Τράπεζας στις 31.12.2025;",
+  "Πόσους συνδρομητές FTTH είχε ο ΟΤΕ στο τέλος του 2025;",
+  "Ποια ήταν τα βασικά κέρδη ανά μετοχή του Ομίλου Jumbo το 2025;",
+  "Πόσα χρήματα δαπάνησε ο ΟΤΕ για διαφήμιση στο TikTok το 2025;",
 ];
 EXAMPLES.forEach((t) => {
   const b = document.createElement("button");
