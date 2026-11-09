@@ -7,7 +7,7 @@
       .\scripts\run_all.ps1 -Quick          # one embedder, one LLM, no reranker (much faster)
       .\scripts\run_all.ps1 -SkipLLM        # retrieval experiments only
       .\scripts\run_all.ps1 -ServeOnly      # just start the web UI on the best index
-      .\scripts\run_all.ps1 -Quick -Llm groq:llama-3.3-70b-versatile
+      .\scripts\run_all.ps1 -Quick -Llm groq:<model-id>
                                             # use a hosted LLM instead of Ollama
                                             # (needs:  setx LLM_API_KEY "<key>"  once)
 
@@ -17,7 +17,7 @@ param(
     [switch]$Quick,
     [switch]$SkipLLM,
     [switch]$ServeOnly,
-    [string[]]$Llm      # e.g. groq:llama-3.3-70b-versatile ; overrides the Ollama models
+    [string[]]$Llm      # e.g. groq:<model-id> ; overrides the Ollama models
 )
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path $PSScriptRoot -Parent)
@@ -60,6 +60,7 @@ if (-not $ServeOnly) {
     if ($SkipLLM) { $runArgs += "--skip-llm" }
     Write-Host "Running experiments (this can take a while; progress is printed per run) ..." -ForegroundColor Cyan
     athex-rag @runArgs
+    if ($LASTEXITCODE -ne 0) { throw "athex-rag experiments failed (see the error above)" }
 }
 
 # Serve the best configuration found by the experiments

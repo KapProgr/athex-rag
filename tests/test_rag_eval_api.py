@@ -112,6 +112,7 @@ def test_alternative_answers_are_accepted():
 class _Resp:
     def __init__(self, status, body=None, headers=None):
         self.status_code, self._body, self.headers = status, body or {}, headers or {}
+        self.text = str(self._body)
 
     def json(self):
         return self._body
@@ -144,3 +145,14 @@ def test_missing_api_key_is_a_clear_error(monkeypatch):
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="LLM_API_KEY"):
         make_llm("groq:x").generate("s", "p")
+
+
+def test_http_error_includes_server_message(monkeypatch):
+    import pytest
+
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    client = make_llm("groq:old-model")
+    body = {"error": {"message": "The model `old-model` does not exist", "code": "model_not_found"}}
+    monkeypatch.setattr(client, "_post", lambda payload: _Resp(404, body))
+    with pytest.raises(RuntimeError, match="model_not_found"):
+        client.generate("s", "p")

@@ -91,11 +91,12 @@ Without a GPU, a local 7B model takes about a minute per question. A free [Groq]
 
 ```powershell
 setx LLM_API_KEY "<your key>"        # once; then open a new PowerShell
-.\scripts\run_all.ps1 -Quick -Llm groq:llama-3.3-70b-versatile
-athex-rag ask "Ποιο μέρισμα προτείνει η ΔΕΗ για τη χρήση 2025;" --llm groq:llama-3.3-70b-versatile
+# list the model ids your key can use (Groq retires models regularly):
+(Invoke-RestMethod https://api.groq.com/openai/v1/models -Headers @{Authorization="Bearer $env:LLM_API_KEY"}).data.id
+.\scripts\run_all.ps1 -Quick -Llm groq:<model-id>
 ```
 
-The key is read from the environment and never stored in the repo. Rate-limit responses (HTTP 429) are retried automatically. Any OpenAI-compatible API works with `--llm openai:<model>@<base_url>`.
+The key is read from the environment and never stored in the repo. The LLM is checked with one request before the experiments start. Rate-limit responses (HTTP 429) are retried automatically. Any OpenAI-compatible API works with `--llm openai:<model>@<base_url>`.
 
 ### Manual
 

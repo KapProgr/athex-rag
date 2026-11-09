@@ -102,8 +102,18 @@ class OpenAICompatibleClient:
             except ValueError:
                 delay = 2.0 * 2**attempt
             time.sleep(min(delay, 60.0))
-        response.raise_for_status()
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"{self.name}: HTTP {response.status_code} from {self.base_url}: "
+                f"{response.text[:400]}"
+            )
         return response.json()["choices"][0]["message"]["content"].strip()
+
+
+def check_llm(llm: LLMClient) -> None:
+    """Make one tiny request so a bad model name or key fails in seconds, not after
+    the retrieval stages have run."""
+    llm.generate("Απάντησε μόνο με τη λέξη OK.", "OK;")
 
 
 class FakeLLM:

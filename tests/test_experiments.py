@@ -134,3 +134,39 @@ def test_web_ui_and_pdf_route(retriever, tmp_path, monkeypatch):
         assert body["sources"][0]["doc_id"] == "OPAP_2024" and "latency_s" in body
     finally:
         api.app.dependency_overrides.clear()
+
+
+def test_llm_failure_keeps_retrieval_results(tmp_path, monkeypatch):
+    from athex_rag import experiments
+
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    _make_pdfs(raw)
+    items = [EvalItem("a", "net profit ACME 2024", "ACME", 2024, [1], "numeric", answer_value=1)]
+    plan = Plan(
+        pdf_dir=raw,
+        items=items,
+        embedders=["hashing-64"],
+        llms=["fake"],
+        chunk_sizes=[800],
+        reranker=None,
+        k=3,
+        out=tmp_path / "reports",
+        index_root=tmp_path / "idx",
+        cache_dir=tmp_path / "cache",
+    )
+    calls = {"n": 0}
+
+    class Boom:
+        name = "boom"
+
+        def generate(self, system, prompt):
+            calls["n"] += 1
+            if calls["n"] > 1:  # the preflight check passes, the real run fails
+                raise RuntimeError("HTTP 500")
+            return "OK"
+
+    monkeypatch.setattr(experiments, "make_llm", lambda spec: Boom())
+    report = Runner(plan, log=lambda *_: None).execute()
+    assert "## 1. Chunk size" in report and "Run failed" in report
+    assert (tmp_path / "reports" / "experiments.json").exists()

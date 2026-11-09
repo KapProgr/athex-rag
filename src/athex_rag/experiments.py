@@ -33,7 +33,7 @@ from .evaluation import (
 )
 from .index import Index
 from .ingest import chunks_for_document, iter_pdfs
-from .llm import make_llm
+from .llm import check_llm, make_llm
 from .rag import RAG
 from .rerank import make_reranker
 from .retrieval import Retriever
@@ -166,6 +166,11 @@ class Runner:
         p = self.plan
         emb0 = p.embedders[0]
 
+        if not skip_llm:
+            for llm in p.llms:  # fail fast on a wrong model name or missing key
+                self.log(f"Checking LLM {llm} ...")
+                check_llm(make_llm(llm))
+
         self.log("Stage 1: chunk size x retrieval mode")
         stage1 = []
         for chunk in p.chunk_sizes:
@@ -201,7 +206,12 @@ class Runner:
             self.log("Stage 5: LLM (full pipeline)")
             for llm in p.llms:
                 cfg = Config(best.chunk, best.tables, best.embedder, best.mode, best.reranker, llm)
-                _, results = self.run("5 llm", cfg)
+                try:
+                    _, results = self.run("5 llm", cfg)
+                except Exception as exc:  # keep the retrieval results even if the LLM fails
+                    self.log(f"  {llm} failed: {exc}")
+                    self.error_sections.append((cfg.name, f"Run failed: `{exc}`"))
+                    continue
                 self.error_sections.append((cfg.name, error_report(results, p.items)))
 
         return self.report(best)
