@@ -1,5 +1,9 @@
 """Deploy the live demo to a Hugging Face Space with one command.
 
+Note: Hugging Face now requires a PRO subscription for Docker Spaces. For a free
+deployment use Render instead (render.yaml, see README); this script's
+``--export-index deploy/demo-index`` builds the index that deployment uses.
+
     pip install -e ".[deploy]"
     setx HF_TOKEN "<hf write token>"      (once; https://huggingface.co/settings/tokens)
     python scripts/deploy_space.py
@@ -112,7 +116,19 @@ def main() -> None:
     parser.add_argument("--chunk", type=int, default=600, help="best setting in the evaluation")
     parser.add_argument("--private", action="store_true")
     parser.add_argument("--dry-run", action="store_true", help="stage only, do not upload")
+    parser.add_argument(
+        "--export-index",
+        metavar="DIR",
+        help="only build the keyword index into DIR (used for the Render deploy)",
+    )
     args = parser.parse_args()
+    if args.export_index:
+        out = Path(args.export_index)
+        if out.exists():
+            shutil.rmtree(out)
+        n = build_index(out, args.chunk, ROOT / "data" / "raw", ROOT / "data" / "cache")
+        print(f"Wrote {n} chunks to {out}")
+        return
     dest = ROOT / "build" / "space"
     stage(dest, args.chunk)
     if args.dry_run:
