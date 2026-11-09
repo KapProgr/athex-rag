@@ -54,7 +54,8 @@ def is_refusal(text: str) -> bool:
 
 def parse_citations(text: str) -> list[int]:
     seen: list[int] = []
-    for n in re.findall(r"\[(\d{1,2})\]", text):
+    # some models (gpt-oss) write full-width brackets: 【1】
+    for n in re.findall(r"[\[【](\d{1,2})[\]】]", text):
         if int(n) not in seen:
             seen.append(int(n))
     return seen

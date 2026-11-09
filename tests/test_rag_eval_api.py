@@ -165,3 +165,45 @@ def test_reasoning_block_is_removed():
     assert strip_reasoning(raw) == "Τα κέρδη ήταν 501,1 εκατ. € [1]"
     assert strip_reasoning("σκέψη [2]</think> Απάντηση [1]") == "Απάντηση [1]"
     assert strip_reasoning("Απλή απάντηση [1]") == "Απλή απάντηση [1]"
+
+
+def test_full_width_citations_are_parsed():
+    assert parse_citations("Κέρδη 501,1 εκατ.【1】【3】 και [2]") == [1, 3, 2]
+
+
+def test_answer_found_on_non_gold_page_counts(chunks):
+    from athex_rag.evaluation import score
+
+    # the answer value appears on page 12 of OPAP 2024 (conftest), but gold says page 99
+    item = EvalItem("q", "Κέρδη;", "OPAP", 2024, [99], "numeric", answer_value=1_234_500_000)
+    on_12 = [c for c in chunks if c.company == "OPAP" and c.year == 2024 and c.page == 12]
+    r = score(item, on_12, "Τα κέρδη ήταν 1.234,5 εκατ. ευρώ 【1】")
+    assert not r.hit and r.answer_in_context and r.citation_support == 1.0
+    assert r.category == "ok"
+
+
+def test_common_small_numbers_do_not_count_as_support(chunks):
+    from athex_rag.evaluation import score
+
+    # 9% appears in the JUMBO chunk, but "9" is not distinctive enough to prove support
+    item = EvalItem("q", "Μέλη ΔΣ;", "JUMBO", 2024, [99], "numeric", answer_value=9)
+    jumbo = [c for c in chunks if c.company == "JUMBO" and c.page == 8]
+    r = score(item, jumbo, "9 μέλη [1]")
+    assert r.answer_in_context is False and r.category == "ok_bad_citation"
+
+
+def test_rescore_saved_run(tmp_path, chunks):
+    from athex_rag.evaluation import rescore_run
+
+    item = EvalItem("q", "Κέρδη;", "OPAP", 2024, [12], "numeric", answer_value=1_234_500_000)
+    row = {
+        "id": "q",
+        "retrieved": ["OPAP_2024:p12:t0"],
+        "answer": "1.234,5 εκατ. 【1】",
+        "correct": True,
+        "latency_s": 1.0,
+    }
+    path = tmp_path / "run.jsonl"
+    path.write_text(json.dumps(row, ensure_ascii=False), encoding="utf-8")
+    (r,) = rescore_run(path, [item], {c.id: c for c in chunks})
+    assert r.correct and r.citation_precision == 1.0 and r.category == "ok"

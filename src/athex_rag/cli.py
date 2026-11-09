@@ -116,6 +116,35 @@ def cmd_check_eval(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def cmd_rescore(args: argparse.Namespace) -> int:
+    import json
+
+    from .chunking import Chunk
+    from .evaluation import error_report, rescore_run, save_run
+
+    items = load_items(Path(args.questions))
+    chunks_by_id = {}
+    for folder in args.indexes:
+        with open(Path(folder) / "chunks.jsonl", encoding="utf-8") as f:
+            for line in f:
+                chunk = Chunk.from_dict(json.loads(line))
+                chunks_by_id[chunk.id] = chunk
+    rows, sections = {}, []
+    for run in args.runs:
+        path = Path(run)
+        results = rescore_run(path, items, chunks_by_id)
+        name = path.stem
+        rows[name] = summarize(results)
+        save_run(Path(args.out), name, results, rows[name])
+        if any(r.correct is not None for r in results):
+            sections.append(f"## Error analysis: {name}\n\n" + error_report(results, items, 5))
+    text = "# Rescored runs\n\n" + to_markdown(rows) + "\n\n" + "\n\n".join(sections) + "\n"
+    Path(args.out).mkdir(parents=True, exist_ok=True)
+    (Path(args.out) / "rescored.md").write_text(text, encoding="utf-8")
+    print(text)
+    return 0
+
+
 def cmd_experiments(args: argparse.Namespace) -> int:
     from .experiments import Plan, Runner, update_readme
 
@@ -189,6 +218,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--cache", default="data/cache")
     p.add_argument("--fix", action="store_true", help="set gold_pages from evidence")
     p.set_defaults(func=cmd_check_eval)
+
+    p = sub.add_parser("rescore", help="re-score saved runs with the current metrics")
+    p.add_argument("questions")
+    p.add_argument("runs", nargs="+", help="reports/runs/*.jsonl files")
+    p.add_argument("--indexes", nargs="+", required=True, help="index folders with chunks.jsonl")
+    p.add_argument("--out", default="reports/rescored")
+    p.set_defaults(func=cmd_rescore)
 
     p = sub.add_parser("experiments", help="run the full experiment plan and write a report")
     p.add_argument("questions")

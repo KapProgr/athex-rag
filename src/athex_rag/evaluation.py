@@ -28,7 +28,8 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from .rag import RAG, is_refusal
+from .chunking import Chunk
+from .rag import RAG, is_refusal, parse_citations
 from .retrieval import Hit, Retriever
 from .text import numbers_match, token_f1, token_recall
 
@@ -63,6 +64,8 @@ class ItemResult:
     f1: float | None = None
     refused: bool | None = None
     citation_precision: float | None = None
+    answer_in_context: bool | None = None  # a retrieved chunk contains the answer
+    citation_support: float | None = None  # share of cited chunks that contain the answer
     answer: str = ""
     latency_s: float = 0.0
     retrieved: list[str] = field(default_factory=list)
@@ -102,6 +105,76 @@ def judge_answer(text: str, item: EvalItem) -> tuple[bool, float | None]:
     return any(token_recall(text, g) >= 0.8 for g in golds), f1
 
 
+def _distinctive(value: float) -> bool:
+    """A number specific enough that finding it in a chunk means the chunk states the
+    answer (2,3839 or 1.232.904.830 yes; 50% or 0,40 no: those appear everywhere)."""
+    digits = f"{abs(value):.6f}".replace(".", "").strip("0")
+    return len(digits) >= 4
+
+
+def supports(chunk: Chunk, item: EvalItem) -> bool:
+    """Does this chunk state the answer? Gold-page chunks always count; other chunks
+    count if they contain a distinctive answer value or the gold answer text. The same
+    figure is often repeated on several pages, in different formats (1.232.904.830 on
+    the statement page, 1.232,90 εκατ. in the management report)."""
+    if chunk.company != item.company.upper() or chunk.year != item.year:
+        return False
+    if chunk.page in item.gold_pages:
+        return True
+    if item.type == "numeric" and item.answer_value is not None:
+        value = float(item.answer_value)
+        return _distinctive(value) and numbers_match(chunk.text, value, rel_tol=0.005)
+    if item.type == "text":
+        return any(token_recall(chunk.text, g) >= 0.8 for g in [item.answer, *item.alternatives])
+    return False
+
+
+def score(
+    item: EvalItem,
+    chunks: list[Chunk],
+    answer_text: str | None,
+    latency: float = 0.0,
+) -> ItemResult:
+    """Score one question from its retrieved chunks (in rank order) and the answer."""
+    answerable = item.type != "unanswerable"
+    hit, rr = (False, 0.0)
+    for rank, chunk in enumerate(chunks, start=1):
+        if (
+            chunk.company == item.company.upper()
+            and chunk.year == item.year
+            and chunk.page in item.gold_pages
+        ):
+            hit, rr = True, 1.0 / rank
+            break
+    result = ItemResult(
+        item.id,
+        item.type,
+        hit,
+        rr,
+        latency_s=latency,
+        retrieved=[c.id for c in chunks],
+        source=item.source,
+    )
+    if answerable:
+        result.answer_in_context = any(supports(c, item) for c in chunks)
+    if answer_text is not None:
+        result.answer = answer_text
+        result.correct, result.f1 = judge_answer(answer_text, item)
+        result.refused = is_refusal(answer_text)
+        cited = [chunks[n - 1] for n in parse_citations(answer_text) if 1 <= n <= len(chunks)]
+        if cited and answerable:
+            on_gold = [
+                c.company == item.company.upper()
+                and c.year == item.year
+                and c.page in item.gold_pages
+                for c in cited
+            ]
+            result.citation_precision = sum(on_gold) / len(cited)
+            result.citation_support = sum(supports(c, item) for c in cited) / len(cited)
+    result.category = categorize(result)
+    return result
+
+
 def evaluate_item(
     item: EvalItem, retriever: Retriever, rag: RAG | None, k: int, use_filters: bool
 ) -> ItemResult:
@@ -110,40 +183,36 @@ def evaluate_item(
     start = time.perf_counter()
     if rag is None:
         hits = retriever.search(item.question, k=k, company=company, year=year)
-        answer = None
+        answer_text = None
     else:
         answer = rag.ask(item.question, company=company, year=year, k=k)
-        hits = answer.sources
-    latency = time.perf_counter() - start
+        hits, answer_text = answer.sources, answer.text
+    return score(item, [h.chunk for h in hits], answer_text, time.perf_counter() - start)
 
-    # unanswerable questions have no gold page; retrieval is not scored for them
-    hit, rr = retrieval_scores(hits, item) if item.type != "unanswerable" else (False, 0.0)
-    result = ItemResult(
-        item.id,
-        item.type,
-        hit,
-        rr,
-        latency_s=latency,
-        retrieved=[h.chunk.id for h in hits],
-        source=item.source,
-    )
-    if answer is not None:
-        result.answer = answer.text
-        result.correct, result.f1 = judge_answer(answer.text, item)
-        result.refused = answer.refused
-        cited = answer.cited_hits
-        if cited and item.type != "unanswerable":
-            result.citation_precision = sum(_on_gold(h, item) for h in cited) / len(cited)
-    result.category = categorize(result)
-    return result
+
+def rescore_run(path: Path, items: list[EvalItem], chunks_by_id: dict) -> list[ItemResult]:
+    """Re-score a saved run (``reports/runs/*.jsonl``) with the current metrics,
+    without calling the retriever or the LLM again."""
+    by_id = {it.id: it for it in items}
+    results = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            row = json.loads(line)
+            item = by_id.get(row["id"])
+            if item is None:
+                continue
+            chunks = [chunks_by_id[c] for c in row["retrieved"] if c in chunks_by_id]
+            text = row.get("answer") if row.get("correct") is not None else None
+            results.append(score(item, chunks, text, row.get("latency_s", 0.0)))
+    return results
 
 
 ERROR_CATEGORIES = {
-    "ok": "Correct, and cites the right page",
-    "ok_bad_citation": "Correct value, but no citation on the gold page",
-    "retrieval_miss": "Gold page not in the retrieved sources",
-    "false_refusal": "Gold page retrieved, but the model said it could not find the answer",
-    "wrong_answer": "Gold page retrieved, but the answer is wrong (unit, year, misread table)",
+    "ok": "Correct, and cites a source that states the answer",
+    "ok_bad_citation": "Correct value, but no cited source states it",
+    "retrieval_miss": "No retrieved source states the answer",
+    "false_refusal": "The answer was in the sources, but the model said it could not find it",
+    "wrong_answer": "The answer was in the sources, but the model got it wrong",
     "hallucination": "Unanswerable question, but the model invented an answer",
     "refused_correctly": "Unanswerable question, correctly refused",
     "retrieved": "Retrieval-only run: gold page retrieved",
@@ -151,15 +220,17 @@ ERROR_CATEGORIES = {
 
 
 def categorize(r: ItemResult) -> str:
+    found = r.hit or bool(r.answer_in_context)
     if r.correct is None:  # retrieval-only run
         if r.type == "unanswerable":
             return ""
-        return "retrieved" if r.hit else "retrieval_miss"
+        return "retrieved" if found else "retrieval_miss"
     if r.type == "unanswerable":
         return "refused_correctly" if r.correct else "hallucination"
     if r.correct:
-        return "ok" if (r.citation_precision or 0) > 0 else "ok_bad_citation"
-    if not r.hit:
+        supported = (r.citation_support or 0) > 0 or (r.citation_precision or 0) > 0
+        return "ok" if supported else "ok_bad_citation"
+    if not found:
         return "retrieval_miss"
     return "false_refusal" if r.refused else "wrong_answer"
 
@@ -209,6 +280,7 @@ def summarize(results: list[ItemResult]) -> dict:
     summary = {
         "n": len(results),
         "hit@k": _mean(r.hit for r in answerable),
+        "answer@k": _mean(r.answer_in_context for r in answerable),
         "mrr": _mean(r.rr for r in answerable),
         "correct": _mean(r.correct for r in results),
         "correct_numeric": _mean(r.correct for r in results if r.type == "numeric"),
@@ -218,6 +290,7 @@ def summarize(results: list[ItemResult]) -> dict:
         "refused_unanswerable": _mean(r.refused for r in unanswerable),
         "refusal_rate_answerable": _mean(r.refused for r in answerable),
         "citation_precision": _mean(r.citation_precision for r in answerable),
+        "citation_support": _mean(r.citation_support for r in answerable),
         "latency_s": _mean(r.latency_s for r in results),
     }
     return summary
@@ -227,6 +300,7 @@ def to_markdown(rows: dict[str, dict]) -> str:
     """Render ``{config_name: summary}`` as a markdown comparison table."""
     columns = [
         "hit@k",
+        "answer@k",
         "mrr",
         "correct",
         "correct_numeric",
@@ -236,6 +310,7 @@ def to_markdown(rows: dict[str, dict]) -> str:
         "refused_unanswerable",
         "refusal_rate_answerable",
         "citation_precision",
+        "citation_support",
         "latency_s",
     ]
     present = [c for c in columns if any(s.get(c) is not None for s in rows.values())]

@@ -64,7 +64,7 @@ if (-not $ServeOnly) {
 }
 
 # Serve the best configuration found by the experiments
-$best = Get-Content "reports\experiments.json" -Raw | ConvertFrom-Json
+$best = Get-Content "reports\experiments.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 Write-Host "Best configuration: $($best.best)" -ForegroundColor Green
 $c = $best.best_config
 $env:ATHEX_INDEX_DIR = $c.index_dir
