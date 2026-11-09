@@ -123,7 +123,7 @@ def supports(chunk: Chunk, item: EvalItem) -> bool:
         return True
     if item.type == "numeric" and item.answer_value is not None:
         value = float(item.answer_value)
-        return _distinctive(value) and numbers_match(chunk.text, value, rel_tol=0.005)
+        return _distinctive(value) and numbers_match(chunk.text, value, rel_tol=0.001)
     if item.type == "text":
         return any(token_recall(chunk.text, g) >= 0.8 for g in [item.answer, *item.alternatives])
     return False

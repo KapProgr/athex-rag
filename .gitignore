@@ -14,3 +14,4 @@ reports/*.jsonl
 data/cache/
 indexes/
 reports/runs/
+reports/rescored/

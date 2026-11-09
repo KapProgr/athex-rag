@@ -169,6 +169,7 @@ def test_reasoning_block_is_removed():
 
 def test_full_width_citations_are_parsed():
     assert parse_citations("Κέρδη 501,1 εκατ.【1】【3】 και [2]") == [1, 3, 2]
+    assert parse_citations("5,5 GW【1†L1-L3】【4†L1-L3】") == [1, 4]
 
 
 def test_answer_found_on_non_gold_page_counts(chunks):
@@ -207,3 +208,15 @@ def test_rescore_saved_run(tmp_path, chunks):
     path.write_text(json.dumps(row, ensure_ascii=False), encoding="utf-8")
     (r,) = rescore_run(path, [item], {c.id: c for c in chunks})
     assert r.correct and r.citation_precision == 1.0 and r.category == "ok"
+
+
+def test_rounded_different_figure_is_not_support():
+    from athex_rag.chunking import Chunk
+    from athex_rag.evaluation import supports
+
+    # 0,36 δισ. (360 εκατ.) is 0.15% away from 359.453 χιλ. - a different figure
+    item = EvalItem("q", "Κέρδη;", "PPC", 2025, [441], "numeric", answer_value=359_453_000)
+    chunk = Chunk("PPC_2025:p13:t0", "PPC_2025", "PPC", 2025, 13, "κέρδη από €0,36 δισ.")
+    assert not supports(chunk, item)
+    same = Chunk("PPC_2025:p20:t0", "PPC_2025", "PPC", 2025, 20, "καθαρά κέρδη 359,45 εκατ.")
+    assert supports(same, item)

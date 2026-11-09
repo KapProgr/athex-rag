@@ -1,8 +1,8 @@
 # athex-rag
 
-**Ask questions about Greek listed companies' annual reports and get answers with page-level citations, measured against a hand-checked evaluation set.**
+**Ask questions about Greek listed companies' annual reports and get answers with page-level citations, measured on a 93-question evaluation set with verified evidence.**
 
-Annual financial reports of Athens Stock Exchange (ATHEX) companies are 150–400 page Greek PDFs full of tables. `athex-rag` parses them (including tables), retrieves the relevant passages with hybrid search, and has a local LLM answer *only* from those passages, citing `[company, year, page]` for every claim, or refusing when the answer is not there.
+Annual financial reports of Athens Stock Exchange (ATHEX) companies are 200–670 page Greek PDFs full of tables. `athex-rag` parses them (including tables), retrieves the relevant passages with keyword, dense or hybrid search, and has an LLM (local via Ollama, or hosted via Groq) answer *only* from those passages, citing `[company, year, page]` for every claim, or refusing when the answer is not there.
 
 The point of the project is the **evaluation**: every design choice (chunk size, keyword vs dense vs hybrid retrieval, table extraction, embedding model, reranking, LLM) is compared on the same questions with known answers and known source pages, and failures are broken down by cause.
 
@@ -13,25 +13,58 @@ The point of the project is the **evaluation**: every design choice (chunk size,
 
 ## Results
 
-### Keyword baseline (BM25)
+93 questions over 10 reports (77 answerable, 16 unanswerable), top-5 retrieved chunks, answers generated with two LLMs on Groq. Full tables: [reports/answer_quality.md](reports/answer_quality.md).
 
-Retrieval only, measured on the 93-question set: is a gold page among the top 5 chunks?
+### Answers
 
-| BM25 configuration | hit@5 | MRR |
+| | gpt-oss-120b | qwen3.8-27b |
 |---|---|---|
-| chunk 1200, no stemming | 63.6% | 0.498 |
-| chunk 1200, Greek prefix stemming (6 chars) | 68.8% | 0.523 |
-| chunk 600, stemming | 71.4% | 0.528 |
+| **Correct answers** (all 93) | **82.8%** | **83.9%** |
+| numeric questions | 84.1% | 85.7% |
+| numeric, answer in a table | 67.9% | 71.4% |
+| text questions | 57.1% | 57.1% |
+| **Unanswerable questions correctly refused** | **100%** | **100%** |
+| answerable questions refused | 16.9% | 15.6% |
+| cited sources that state the answer | 78.8% | 77.2% |
+| latency per question | 11.1 s | 12.4 s |
 
-Light stemming fixes inflection mismatches (`ελεγκτική` vs `Ελεγκτές`). Most remaining misses are generic terms such as `κύκλος εργασιών`, which appear on dozens of pages of a 650-page report. Full breakdown: [reports/bm25_baseline.md](reports/bm25_baseline.md).
+**The system never invented an answer to an unanswerable question.** When it fails, it fails by saying "Δεν βρέθηκε η πληροφορία στα έγγραφα", which in a financial setting is the right way to fail.
 
-### Full pipeline (dense, hybrid, reranker, LLM)
+### Retrieval (k = 5)
+
+| | gold page in top 5 | a chunk stating the answer in top 5 | MRR |
+|---|---|---|---|
+| **BM25, Greek stemming, chunk 600** | **71.4%** | **80.5%** | 0.528 |
+| hybrid (BM25 + e5-small, RRF), chunk 600 | 67.5% | 77.9% | 0.512 |
+| dense (multilingual-e5-small), chunk 600 | 61.0% | 68.8% | 0.482 |
+| BM25, chunk 1200 | 68.8% | 74.0% | 0.523 |
+| BM25, chunk 600, without table chunks | 68.8% | 77.9% | 0.524 |
+| BM25 without stemming, chunk 1200 | 63.6% | – | 0.498 |
+
+The second column exists because the same figure often appears on several pages in different formats (`1.232.904.830` in the income statement, `1.232,90 εκατ.` in the management report). A chunk counts if it contains the exact answer text or a distinctive number (at least 4 significant digits, within 0.1%).
+
+### What the evaluation shows
+
+1. **Keywords beat the small multilingual embedding model on Greek financial text.** BM25 with light stemming outperforms both dense retrieval (+10.4 points hit@5) and the hybrid (+3.9). Questions ask for specific terms (`κύκλος εργασιών`, `CET1`, `ορκωτός ελεγκτής`), and exact matching on them is hard to beat. Larger embedding models (e5-base, bge-m3) and a cross-encoder reranker are wired into the experiment runner but were not run yet.
+2. **Retrieval is the bottleneck, not the LLM.** About 75% of the answerable questions end with a correct answer and a citation that states it. Of the 15–16 wrong or refused answers, 12 are retrieval misses; only 1–2 are wrong readings of a retrieved source. The two LLMs score almost the same.
+3. **Failures cluster in three places:**
+   - *Auditor questions* (5 of 10 fail). The auditor's name sits on the signature page of the audit report, which shares almost no words with "ποια ελεγκτική εταιρεία έλεγξε…".
+   - *Motor Oil's statements* (3 of 5 table questions fail). Its pages are two-column, and plain-text extraction interleaves the columns, so table rows are scrambled.
+   - *Group vs company columns.* Statements put group and parent-company figures side by side; once, the model returned the company's 492,8 instead of the group's 478,8.
+4. **Table chunks help a little** (+2.6 points hit@5 for BM25 at chunk 600).
+5. **One question is ambiguous in the source itself.** PPC's 2024 report gives total investments as €3 δισ. on one page and €1.875 εκατ. on another. Both models answered the second. Real documents are not always consistent, and an evaluation set has to be read with that in mind.
+
+### Latest automatic run
 
 <!-- RESULTS:START -->
 
-_Run `.\scripts\run_all.ps1` (or `athex-rag experiments eval/questions.jsonl --update-readme`) to fill this section._
+See [reports/experiments.md](reports/experiments.md). `athex-rag experiments ... --update-readme` writes its report here.
 
 <!-- RESULTS:END -->
+
+### Next improvements, in order of expected gain
+
+Column-aware text extraction for two-column layouts; a cross-encoder reranker on the top 20; a "find the signature page" query rewrite for auditor questions; a larger multilingual embedding model.
 
 ## How it works
 

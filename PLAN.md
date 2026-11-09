@@ -9,41 +9,31 @@
 - [x] Πειράματα σε 5 στάδια με μία εντολή, ανάλυση λαθών, αυτόματη ενημέρωση README
 - [x] Web UI, API, CLI, tests, CI, Docker
 
-## Τι μένει (με τη σειρά)
+## Αποτελέσματα (έγιναν)
 
-### 1. Έλεγχος των ερωτήσεων (~1 ώρα, από σένα)
+- [x] Πειράματα με Groq (`gpt-oss-120b`, `qwen3.8-27b`): **83–84% σωστές απαντήσεις, 100% σωστή άρνηση** στις ερωτήσεις χωρίς απάντηση
+- [x] Ανάλυση λαθών στο README: η αναζήτηση είναι το bottleneck (ορκωτοί ελεγκτές, δίστηλες σελίδες Motor Oil, όμιλος/εταιρεία)
+- [x] Δύο σφάλματα μέτρησης βρέθηκαν και διορθώθηκαν (παραπομπές `【1】`, ίδιος αριθμός σε άλλη σελίδα). Οι απαντήσεις ξαναβαθμολογήθηκαν με `athex-rag rescore` χωρίς νέες κλήσεις
 
-Οι ερωτήσεις γράφτηκαν με βοήθεια AI. Σε interview θα σε ρωτήσουν γι' αυτές, οπότε πρέπει να τις έχεις δει:
+## Τι μένει
 
-```powershell
-athex-rag check-eval eval\questions.jsonl     # πρέπει να βγάλει 0 PROBLEM
-```
+### 1. Έλεγχος των ερωτήσεων (~1 ώρα, από σένα, απαραίτητο)
 
-Για κάθε ερώτηση άνοιξε το PDF στη σελίδα `gold_pages[0]` και έλεγξε ότι η απάντηση είναι σωστή και η ερώτηση κατανοητή. Διόρθωσε, σβήσε ή πρόσθεσε δικές σου ερωτήσεις. Μετά άλλαξε τη σημείωση στο README σε «...and reviewed by hand».
+Οι ερωτήσεις γράφτηκαν με βοήθεια AI και σε interview θα σε ρωτήσουν γι' αυτές. Για κάθε μία, άνοιξε το PDF στη σελίδα `gold_pages[0]` και έλεγξε ότι η απάντηση στέκει. Ξεκίνα από το `ppc24-05`, που είναι διφορούμενο ήδη στην πηγή (€3 δισ. vs €1.875 εκατ.). Οι ερωτήσεις παράγονται από το `eval/build_questions.py`: αλλάζεις εκεί, τρέχεις `python eval\build_questions.py eval\questions.jsonl` και `athex-rag check-eval eval\questions.jsonl --fix`.
 
-### 2. Τρέξιμο πειραμάτων (από σένα, επειδή χρειάζεται Ollama και HuggingFace)
+### 2. Screenshot και push
 
-```powershell
-.\scripts\run_all.ps1 -Quick     # πρώτα αυτό (1 embedder, 1 LLM)
-.\scripts\run_all.ps1            # μετά το πλήρες
-```
+- Με το UI ανοιχτό (`.\scripts\run_all.ps1 -ServeOnly -Llm groq:qwen/qwen3.8-27b`), κάνε μια ερώτηση και αποθήκευσε screenshot ως `docs\screenshot.png`. Στο README βγάλε το σχόλιο γύρω από τη γραμμή της εικόνας.
+- `git add -A`, `git commit -m "Add screenshot"`, `git remote add origin https://github.com/KapProgr/athex-rag.git`, `git push -u origin main`
 
-Γράφει `reports/experiments.md` και ενημερώνει το README. Αν δεν έχεις κάρτα γραφικών, το βήμα του LLM (93 ερωτήσεις × 2 μοντέλα) είναι το πιο αργό. Ξεκίνα με `-Quick`.
+### 3. Προαιρετικά: οι βελτιώσεις του README
 
-### 3. Ανάλυση λαθών (~1 ώρα)
+Μεγαλύτερο embedding μοντέλο και reranker (`.\scripts\run_all.ps1 -Llm groq:qwen/qwen3.8-27b` χωρίς `-Quick`, θέλει ώρες σε επεξεργαστή), εξαγωγή κειμένου που καταλαβαίνει τις στήλες για τη Motor Oil, και αναζήτηση της σελίδας υπογραφής για τις ερωτήσεις ελεγκτών. Κάθε βελτίωση που μετράς είναι ένα ακόμα bullet.
 
-Διάβασε την ενότητα «Error analysis» στο `reports/experiments.md` και γράψε 3–5 προτάσεις στο README: πού αποτυγχάνει το σύστημα και γιατί. Πιθανά ευρήματα: οι δίστηλες σελίδες της Motor Oil, οι τράπεζες με 650 σελίδες, η σύγχυση εταιρείας/ομίλου ή 2024/2025 στον ίδιο πίνακα.
+## Bullets για το CV
 
-### 4. Παρουσίαση
-
-- Screenshot του UI σε `docs/screenshot.png` (η γραμμή στο README είναι έτοιμη, απλώς βγάλε το σχόλιο)
-- `git push` στο GitHub, και το repo στο CV
-- Προαιρετικό: σύντομο post στο LinkedIn με το βασικό εύρημα
-
-## Bullets για το CV (συμπλήρωσε τα [ ] από το reports/experiments.md)
-
-**ATHEX-RAG: Cited Q&A over Greek Annual Financial Reports** · Python, FastAPI, PyMuPDF, sentence-transformers, Ollama
-- Built a retrieval-augmented QA system over 10 annual reports of Athens Stock Exchange companies (~4,100 pages), answering in Greek with page-level citations via a local LLM; FastAPI + web UI that opens the cited PDF page.
-- Created a 93-question evaluation set (numeric, table-based, factual and unanswerable) with automatically verified evidence; hybrid BM25 + dense retrieval with Reciprocal Rank Fusion reached [X]% hit@5 vs [Y]% for dense alone.
-- Engineered Greek-specific normalization, number parsing and cell-level table extraction; the system answers [A]% of questions correctly and refuses [R]% of unanswerable ones.
-- 50+ unit tests, CI on GitHub Actions, Docker, one-command experiment runner.
+**ATHEX-RAG: Cited Q&A over Greek Annual Financial Reports** · Python, FastAPI, PyMuPDF, BM25, sentence-transformers, LLMs (Groq / Ollama) · github.com/KapProgr/athex-rag
+- Built a retrieval-augmented QA system over 10 annual reports of 5 Athens Stock Exchange companies (~4,100 Greek pages, 2,500+ tables) that answers with page-level citations or refuses; FastAPI backend and web UI that opens the cited PDF page.
+- Designed a 93-question evaluation set with automatically verified evidence: 84% of answers correct and 100% of unanswerable questions correctly refused (no hallucinated answers).
+- Ran retrieval ablations showing BM25 with Greek stemming beats multilingual dense and hybrid retrieval on financial text (71% vs 61% / 68% hit@5); error analysis traced most failures to retrieval, not the LLM.
+- Engineered Greek number parsing, cell-level table extraction and crash-isolated PDF parsing; 65 unit tests, GitHub Actions CI, Docker.
