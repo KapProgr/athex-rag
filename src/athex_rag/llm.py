@@ -107,7 +107,17 @@ class OpenAICompatibleClient:
                 f"{self.name}: HTTP {response.status_code} from {self.base_url}: "
                 f"{response.text[:400]}"
             )
-        return response.json()["choices"][0]["message"]["content"].strip()
+        return strip_reasoning(response.json()["choices"][0]["message"]["content"] or "")
+
+
+def strip_reasoning(text: str) -> str:
+    """Drop a reasoning block (``<think>...</think>``) that some models (Qwen, DeepSeek)
+    put before the answer. Its numbers and [n] markers would otherwise be scored as if
+    they were part of the answer."""
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S)
+    if "</think>" in text:  # opening tag missing / truncated
+        text = text.split("</think>")[-1]
+    return text.strip()
 
 
 def check_llm(llm: LLMClient) -> None:

@@ -156,3 +156,12 @@ def test_http_error_includes_server_message(monkeypatch):
     monkeypatch.setattr(client, "_post", lambda payload: _Resp(404, body))
     with pytest.raises(RuntimeError, match="model_not_found"):
         client.generate("s", "p")
+
+
+def test_reasoning_block_is_removed():
+    from athex_rag.llm import strip_reasoning
+
+    raw = "<think>Ίσως 999 εκατ. [3]... όχι, [1].</think>\n\nΤα κέρδη ήταν 501,1 εκατ. € [1]"
+    assert strip_reasoning(raw) == "Τα κέρδη ήταν 501,1 εκατ. € [1]"
+    assert strip_reasoning("σκέψη [2]</think> Απάντηση [1]") == "Απάντηση [1]"
+    assert strip_reasoning("Απλή απάντηση [1]") == "Απλή απάντηση [1]"
