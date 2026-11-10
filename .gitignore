@@ -18,3 +18,5 @@ reports/rescored/
 build/
 reports/llm_cache.jsonl
 reports/final/*.jsonl
+reports/final/
+reports/rescored-*/
