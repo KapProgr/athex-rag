@@ -6,30 +6,22 @@ re-scored with `athex-rag rescore` after two measurement fixes: citations writte
 【1†L1-L3】 are parsed, and a retrieved or cited chunk counts as supporting the answer if it
 states it, even on a page other than the gold page. No answers were regenerated.
 
+Re-scored again with the stricter, rounding-consistent number matching (see final_answers.md).
+
 | config | hit@k | answer@k | mrr | correct | correct_numeric | correct_text | hit@k_table_q | correct_table_q | refused_unanswerable | refusal_rate_answerable | citation_precision | citation_support | latency_s |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1-chunk-x-mode-bm25-chunk1200 | 68.8% | 74.0% | 0.523 | – | – | – | 50.0% | – | – | – | – | – | 0.05 |
-| 1-chunk-x-mode-bm25-chunk2000 | 68.8% | 71.4% | 0.518 | – | – | – | 50.0% | – | – | – | – | – | 0.04 |
-| 1-chunk-x-mode-bm25-chunk600 | 71.4% | 80.5% | 0.528 | – | – | – | 46.4% | – | – | – | – | – | 0.09 |
-| 1-chunk-x-mode-dense-multilingual-e5-small-chunk1200 | 58.4% | 61.0% | 0.452 | – | – | – | 39.3% | – | – | – | – | – | 0.03 |
-| 1-chunk-x-mode-dense-multilingual-e5-small-chunk2000 | 58.4% | 66.2% | 0.464 | – | – | – | 28.6% | – | – | – | – | – | 0.03 |
-| 1-chunk-x-mode-dense-multilingual-e5-small-chunk600 | 61.0% | 68.8% | 0.482 | – | – | – | 35.7% | – | – | – | – | – | 0.04 |
-| 1-chunk-x-mode-hybrid-multilingual-e5-small-chunk1200 | 67.5% | 74.0% | 0.525 | – | – | – | 46.4% | – | – | – | – | – | 0.07 |
-| 1-chunk-x-mode-hybrid-multilingual-e5-small-chunk2000 | 68.8% | 75.3% | 0.499 | – | – | – | 42.9% | – | – | – | – | – | 0.06 |
-| 1-chunk-x-mode-hybrid-multilingual-e5-small-chunk600 | 67.5% | 77.9% | 0.512 | – | – | – | 39.3% | – | – | – | – | – | 0.12 |
-| 2-tables-bm25-chunk600-no-tables | 68.8% | 77.9% | 0.524 | – | – | – | 39.3% | – | – | – | – | – | 0.10 |
-| 5-llm-bm25-chunk600-groq-openai-gpt-oss-120b | 71.4% | 80.5% | 0.528 | 82.8% | 84.1% | 57.1% | 46.4% | 67.9% | 100.0% | 16.9% | 56.6% | 78.8% | 11.13 |
+| 5-llm-bm25-chunk600-groq-openai-gpt-oss-120b | 71.4% | 80.5% | 0.528 | 81.7% | 82.5% | 57.1% | 46.4% | 64.3% | 100.0% | 16.9% | 56.6% | 78.8% | 11.13 |
 | 5-llm-bm25-chunk600-groq-qwen-qwen3.8-27b | 71.4% | 80.5% | 0.528 | 83.9% | 85.7% | 57.1% | 46.4% | 71.4% | 100.0% | 15.6% | 55.6% | 77.2% | 12.39 |
 
 ## Error analysis: 5-llm-bm25-chunk600-groq-openai-gpt-oss-120b
 
 | outcome | count | share | meaning |
 |---|---|---|---|
-| ok | 57 | 61% | Correct, and cites a source that states the answer |
+| ok | 56 | 60% | Correct, and cites a source that states the answer |
 | ok_bad_citation | 4 | 4% | Correct value, but no cited source states it |
 | retrieval_miss | 12 | 13% | No retrieved source states the answer |
 | false_refusal | 2 | 2% | The answer was in the sources, but the model said it could not find it |
-| wrong_answer | 2 | 2% | The answer was in the sources, but the model got it wrong |
+| wrong_answer | 3 | 3% | The answer was in the sources, but the model got it wrong |
 | refused_correctly | 16 | 17% | Unanswerable question, correctly refused |
 
 **retrieval_miss** examples:
@@ -51,6 +43,8 @@ states it, even on a page other than the gold page. No answers were regenerated.
   gold: 501,1 εκατ. € (p. [212, 213]) · got: Τα κέρδη χρήσης του Ομίλου ΟΤΕ για το 2025 ήταν: - **Κέρδη χρήσης από συνεχιζόμενες δραστηριότητες**: 726,0 [3][4] - **Κέρδη χρήσης από διακοπείσες δραστηριότητες**: (224,9) [3][4] · retrieved: OTE_2025:p164:t5, OTE_2025:p148:t3, OTE_2025:p280:t1
 - `ppc24-05` Σε πόσο ανήλθαν οι συνολικές επενδύσεις της ΔΕΗ το 2024;  
   gold: 3 δισ. € (p. [12]) · got: Οι συνολικές επενδύσεις του Ομίλου ΔΕΗ για το 2024 ανήλθαν σε **€ 1,875 εκατ.** [1] · retrieved: PPC_2024:p14:t1, PPC_2024:p12:t1, PPC_2024:p577:t6
+- `ete24-05` Ποιος ήταν ο Δείκτης Κάλυψης Ρευστότητας (LCR) της Εθνικής Τράπεζας στο τέλος του 2024;  
+  gold: 261% (p. [44]) · got: Ο Δείκτης Κάλυψης Ρευστότητας (LCR) της Εθνικής Τράπεζας στο τέλος του 2024 ήταν **262 %** [2] · retrieved: ETE_2024:p411:t3, ETE_2024:p44:t2, ETE_2024:p101:t1
 
 **false_refusal** examples:
 

@@ -32,8 +32,11 @@
 
 ## Bullets για το CV
 
-**ATHEX-RAG: Cited Q&A over Greek Annual Financial Reports** · Python, FastAPI, PyMuPDF, BM25, sentence-transformers, LLMs (Groq / Ollama) · github.com/KapProgr/athex-rag · live demo: athex-rag.onrender.com
-- Built a retrieval-augmented QA system over 10 annual reports of 5 Athens Stock Exchange companies (~4,100 Greek pages, 2,500+ tables) that answers with page-level citations or refuses; FastAPI backend and web UI that opens the cited PDF page, deployed as a public demo (Docker, Render) with rate limiting.
-- Designed a 93-question evaluation set with automatically verified evidence: 84% of answers correct and 100% of unanswerable questions correctly refused (no hallucinated answers).
-- Ran retrieval ablations showing BM25 with Greek stemming beats multilingual dense and hybrid retrieval on financial text (71% vs 61% / 68% hit@5); error analysis traced most failures to retrieval, not the LLM.
-- Engineered Greek number parsing, cell-level table extraction and crash-isolated PDF parsing; 65 unit tests, GitHub Actions CI, Docker.
+**ATHEX-RAG: Cited Q&A over Greek Annual Financial Reports** · Python, FastAPI, PyMuPDF, BM25, LLMs (Groq / Ollama), Docker · github.com/KapProgr/athex-rag · live demo: athex-rag.onrender.com
+- Built a retrieval-augmented QA system over 10 annual reports of 5 Athens Stock Exchange companies (~4,100 Greek pages, 2,500+ tables) that answers with page-level citations or refuses; deployed as a public demo (FastAPI, Docker, Render) with rate limiting.
+- Designed a 93-question evaluation set with automatically verified evidence: 86% of answers correct and 100% of unanswerable questions correctly refused (no hallucinated answers).
+- Used error analysis and a dev/test split to improve retrieval (column-aware PDF extraction, financial glossary expansion, BM25 tuning): +16 points hit@5 on held-out questions; text-question accuracy rose from 57% to 93%.
+- Showed through ablations that BM25 with Greek stemming beats multilingual dense and hybrid retrieval on this data; engineered Greek number parsing, cell-level table extraction and crash-isolated PDF parsing; 87 tests, CI.
+
+Συντομότερη εκδοχή, αν χρειάζεσαι μία γραμμή:
+> **ATHEX-RAG**: RAG over 10 Greek annual reports with page-level citations; 86% correct answers, 100% refusal on unanswerable questions, +16 pts retrieval via error-driven improvements on a held-out split. Live demo.
