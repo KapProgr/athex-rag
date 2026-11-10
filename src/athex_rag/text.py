@@ -11,7 +11,8 @@ import re
 import unicodedata
 
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
-_NUMBER_RE = re.compile(r"\(?-?\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?\)?|\(?-?\d+(?:[.,]\d+)?\)?")
+# a thousands group is exactly three digits: "0,8777" must not split into "0,877" + "7"
+_NUMBER_RE = re.compile(r"\(?-?\d{1,3}(?:[.,]\d{3}(?!\d))+(?:[.,]\d+)?\)?|\(?-?\d+(?:[.,]\d+)?\)?")
 
 # Small stopword list; enough to stop BM25 from rewarding "και", "της", "the".
 _RAW_STOPWORDS = """
@@ -76,12 +77,8 @@ def search_tokens(text: str, prefix: int | None = 6) -> list[str]:
     return [t if t.isdigit() or len(t) <= prefix else t[:prefix] for t in tokens]
 
 
-def parse_number(raw: str, decimal: str = ",") -> float:
-    """Parse one numeric string written in Greek or English convention.
-
-    ``decimal`` is the separator assumed when a single separator is ambiguous
-    (e.g. ``12,5``). Thousands groups of exactly three digits are detected.
-    """
+def _parse(raw: str, decimal: str = ",") -> tuple[float, int, int]:
+    """(value, decimal places, significant digits) of one numeric string."""
     s = raw.strip()
     negative = (s.startswith("(") and s.endswith(")")) or s.startswith("-")
     s = s.strip("()").lstrip("-")
@@ -102,45 +99,70 @@ def parse_number(raw: str, decimal: str = ",") -> float:
         dec = None
     for thousands_sep in {".", ","} - {dec}:
         s = s.replace(thousands_sep, "")
+    decimals = len(s.split(dec)[1]) if dec else 0
     if dec:
         s = s.replace(dec, ".")
     value = float(s)
-    return -value if negative else value
+    digits = len(s.replace(".", "").lstrip("0"))
+    return (-value if negative else value), decimals, digits
 
 
-def extract_numbers(text: str, decimal: str = ",") -> list[float]:
-    """All numbers in ``text``, each also scaled if followed by a scale word."""
-    values: list[float] = []
+def parse_number(raw: str, decimal: str = ",") -> float:
+    """Parse one numeric string written in Greek or English convention.
+
+    ``decimal`` is the separator assumed when a single separator is ambiguous
+    (e.g. ``12,5``). Thousands groups of exactly three digits are detected.
+    """
+    return _parse(raw, decimal)[0]
+
+
+def _numbers_with_precision(text: str, decimal: str = ",") -> list[tuple[float, float, int]]:
+    """(value, unit of the last written digit, significant digits) for every number,
+    plus a scaled copy when a scale word follows ("1,2 εκατ." -> 1.2e6, unit 1e5)."""
+    out: list[tuple[float, float, int]] = []
     norm = normalize(text)
     for match in _NUMBER_RE.finditer(norm):
         try:
-            value = parse_number(match.group(), decimal=decimal)
+            value, decimals, digits = _parse(match.group(), decimal=decimal)
         except ValueError:
             continue
-        values.append(value)
+        unit = 10.0**-decimals
+        out.append((value, unit, digits))
         following = norm[match.end() : match.end() + 16]
         word = _TOKEN_RE.search(following)
         if word and following[: word.start()].strip() in ("", "."):
             scale = SCALE_WORDS.get(word.group())
             if scale:
-                values.append(value * scale)
-    return values
+                out.append((value * scale, unit * scale, digits))
+    return out
 
 
-def numbers_match(predicted: str, gold: float, rel_tol: float = 0.01) -> bool:
-    """True if any number in ``predicted`` equals ``gold`` within ``rel_tol``.
+def extract_numbers(text: str, decimal: str = ",") -> list[float]:
+    """All numbers in ``text``, each also scaled if followed by a scale word."""
+    return [value for value, _, _ in _numbers_with_precision(text, decimal)]
 
-    Reports mix units (euro vs thousands of euro vs millions), so we accept a match
-    at any common scale factor. Signs are ignored: a loss is written "(224,9)" in a
-    table and "ζημιές 224,9" in prose, and the question already fixes the direction.
+
+def numbers_match(predicted: str, gold: float, min_digits: int = 0) -> bool:
+    """True if a number in ``predicted`` is ``gold`` written exactly or *rounded*.
+
+    "1.232,90 εκατ." matches 1.232.904.830 and "3,6 δισ." matches 3.590,8 εκατ.
+    (each is the gold value rounded to the digits shown), but "21,1%" does not match
+    21,2%: a fixed relative tolerance would accept that, which is wrong for ratios.
+
+    Reports mix units (euro vs thousands vs millions), so any common scale factor is
+    accepted. Signs are ignored: a loss is written "(224,9)" in a table and
+    "ζημιές 224,9" in prose, and the question already fixes the direction.
+    ``min_digits`` ignores numbers with fewer significant digits (used when checking
+    whether a passage *states* a value: "0,36 δισ." is too coarse to count).
     """
-    if gold == 0:
-        return any(abs(v) < 1e-9 for v in extract_numbers(predicted))
     gold = abs(gold)
-    for value in extract_numbers(predicted):
-        value = abs(value)  # a loss may be written "(224,9)" or "ζημιές 224,9"
+    for value, unit, digits in _numbers_with_precision(predicted):
+        if digits < min_digits:
+            continue
+        value = abs(value)
         for scale in (1, 1e3, 1e6, 1e9, 1e-3, 1e-6, 1e-9):
-            if abs(value * scale - gold) <= rel_tol * gold:
+            tolerance = 0.5 * unit * scale + 1e-9 * max(gold, 1.0)
+            if abs(value * scale - gold) <= tolerance:
                 return True
     return False
 
