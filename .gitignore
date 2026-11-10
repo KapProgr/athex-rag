@@ -16,3 +16,5 @@ indexes/
 reports/runs/
 reports/rescored/
 build/
+reports/llm_cache.jsonl
+reports/final/*.jsonl

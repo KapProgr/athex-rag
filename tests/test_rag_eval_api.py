@@ -225,3 +225,48 @@ def test_rounded_different_figure_is_not_support():
 def test_api_key_whitespace_is_stripped(monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "  gsk_abc\r\n")
     assert make_llm("groq:m").api_key == "gsk_abc"
+
+
+def test_cached_llm_resumes_without_new_calls(tmp_path):
+    from athex_rag.llm import CachedLLM
+
+    calls = []
+
+    class Counting:
+        name = "counting"
+
+        def generate(self, system, prompt):
+            calls.append(prompt)
+            return f"answer to {prompt}"
+
+    path = tmp_path / "cache.jsonl"
+    first = CachedLLM(Counting(), path)
+    assert first.generate("s", "q1") == "answer to q1"
+    second = CachedLLM(Counting(), path)  # a new run, e.g. after a rate-limit stop
+    assert second.generate("s", "q1") == "answer to q1"
+    assert second.generate("s", "q2") == "answer to q2"
+    assert calls == ["q1", "q2"] and second.hits == 1 and second.misses == 1
+
+
+def test_daily_quota_fails_fast(monkeypatch):
+    import pytest
+
+    from athex_rag import llm as llm_mod
+
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    client = make_llm("groq:m")
+    calls = []
+    monkeypatch.setattr(
+        client,
+        "_post",
+        lambda payload: (
+            calls.append(1)
+            or _Resp(
+                429, {"error": {"message": "tokens per day (TPD)"}}, headers={"retry-after": "159"}
+            )
+        ),
+    )
+    monkeypatch.setattr(llm_mod.time, "sleep", lambda s: pytest.fail("should not wait"))
+    with pytest.raises(RuntimeError, match="TPD"):
+        client.generate("s", "p")
+    assert len(calls) == 1

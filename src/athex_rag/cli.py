@@ -25,7 +25,7 @@ from .evaluation import (
 )
 from .index import Index
 from .ingest import chunks_for_document, iter_pdfs
-from .llm import make_llm
+from .llm import CachedLLM, make_llm
 from .rag import RAG
 from .rerank import make_reranker
 from .retrieval import MODES, Retriever
@@ -84,12 +84,26 @@ def cmd_ask(args: argparse.Namespace) -> int:
 
 def cmd_eval(args: argparse.Namespace) -> int:
     items = load_items(Path(args.questions))
-    llm = None if args.no_llm else make_llm(args.llm)
+    llm = None if args.no_llm else CachedLLM(make_llm(args.llm), Path(args.llm_cache))
     rows = {}
     for mode in args.modes:
         retriever = _load(args.index, mode, args.rerank)
         rag = RAG(retriever, llm, k=args.k) if llm else None
-        results = [evaluate_item(it, retriever, rag, args.k, args.filters) for it in items]
+        results = []
+        for n, it in enumerate(items, start=1):
+            try:
+                results.append(evaluate_item(it, retriever, rag, args.k, args.filters))
+            except Exception as exc:
+                print(f"\nStopped at question {n}/{len(items)} ({it.id}): {exc}", file=sys.stderr)
+                if llm:
+                    print(
+                        f"{llm.misses} new answers were saved to {args.llm_cache}; run the "
+                        "same command again later to continue from here.",
+                        file=sys.stderr,
+                    )
+                return 1
+            if llm and n % 10 == 0:
+                print(f"  {n}/{len(items)} ({llm.hits} from cache)", flush=True)
         name = f"{mode}" + (f"+{llm.name}" if llm else "") + ("+filters" if args.filters else "")
         summary = summarize(results)
         save_run(Path(args.out), name.replace(":", "_").replace("/", "_"), results, summary)
@@ -227,6 +241,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("-k", type=int, default=5)
     p.add_argument("--out", default="reports")
     p.add_argument("--rerank", default=None)
+    p.add_argument(
+        "--llm-cache",
+        default="reports/llm_cache.jsonl",
+        help="answers are saved here so an interrupted run can resume",
+    )
     p.set_defaults(func=cmd_eval)
 
     p = sub.add_parser("check-eval", help="verify evidence quotes and gold pages")

@@ -146,7 +146,7 @@ The demo runs the best configuration from the evaluation (BM25 + Greek stemming)
 2. On [render.com](https://render.com): **New + → Blueprint**, pick the repo. Render reads `render.yaml` and asks for `LLM_API_KEY`, which is stored as a secret and never committed.
 3. Wait for the build (~5 min). The demo is at `https://athex-rag.onrender.com` (or the name Render assigns).
 
-The free plan sleeps after ~15 minutes without traffic, so the first request after that takes about a minute. Per-visitor (6/min) and daily (300) limits keep the public demo from exhausting the LLM quota. After changing the reports or chunking, rebuild the index with `python scripts/deploy_space.py --export-index deploy/demo-index`.
+The free plan sleeps after ~15 minutes without traffic, so the first request after that takes about a minute. Per-visitor (6/min) and daily (80) limits keep the public demo within the LLM quota (the Groq free tier allows about 200k tokens per model per day, roughly 90 answers). After changing the reports or chunking, rebuild the index with `python scripts/deploy_space.py --export-index deploy/demo-index`.
 
 Alternatively, with a Hugging Face PRO account, `python scripts/deploy_space.py` deploys the same app to a Docker Space in one command.
 

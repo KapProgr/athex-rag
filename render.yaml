@@ -16,6 +16,6 @@ services:
       - key: ATHEX_RATE_PER_MINUTE
         value: "6"             # per visitor
       - key: ATHEX_RATE_PER_DAY
-        value: "300"           # whole demo: protects the free LLM quota
+        value: "80"            # whole demo: Groq free tier is ~200k tokens/day (~90 answers)
       - key: ATHEX_LLM_MAX_RETRIES
         value: "2"

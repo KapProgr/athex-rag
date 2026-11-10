@@ -8,9 +8,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import time
+from pathlib import Path
 from typing import Protocol
 
 import httpx
@@ -103,7 +106,9 @@ class OpenAICompatibleClient:
                 delay = float(response.headers.get("retry-after", ""))
             except ValueError:
                 delay = 2.0 * 2**attempt
-            time.sleep(min(delay, 60.0))
+            if delay > 120:
+                break  # a daily quota, not a burst limit: waiting here will not help
+            time.sleep(delay)
         if response.status_code >= 400:
             raise RuntimeError(
                 f"{self.name}: HTTP {response.status_code} from {self.base_url}: "
@@ -120,6 +125,45 @@ def strip_reasoning(text: str) -> str:
     if "</think>" in text:  # opening tag missing / truncated
         text = text.split("</think>")[-1]
     return text.strip()
+
+
+class CachedLLM:
+    """Remembers answers on disk, keyed by model + prompt.
+
+    Hosted free tiers have daily token limits; when a long evaluation stops halfway,
+    re-running it continues from where it stopped instead of paying for the answers
+    again. Identical prompts (same question, same retrieved sources) reuse the answer.
+    """
+
+    def __init__(self, llm: LLMClient, path: Path):
+        self.llm, self.path, self.name = llm, path, llm.name
+        self._cache: dict[str, str] = {}
+        self.hits = self.misses = 0
+        if path.exists():
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        row = json.loads(line)
+                        self._cache[row["key"]] = row["answer"]
+
+    def _key(self, system: str, prompt: str) -> str:
+        return hashlib.sha256(f"{self.name}\n{system}\n{prompt}".encode()).hexdigest()
+
+    def generate(self, system: str, prompt: str) -> str:
+        key = self._key(system, prompt)
+        if key in self._cache:
+            self.hits += 1
+            return self._cache[key]
+        answer = self.llm.generate(system, prompt)
+        self.misses += 1
+        self._cache[key] = answer
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.path, "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps({"key": key, "model": self.name, "answer": answer}, ensure_ascii=False)
+                + "\n"
+            )
+        return answer
 
 
 def check_llm(llm: LLMClient) -> None:
